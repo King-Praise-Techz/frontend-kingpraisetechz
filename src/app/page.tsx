@@ -19,11 +19,16 @@ export default function HomePage() {
 
   useEffect(() => {
     if (isAuthenticated && user?.role) {
-      router.push(`/dashboard/${user.role}`);
+      // Navigate after hydration to avoid build errors
+      const timeout = setTimeout(() => {
+        router.push(`/dashboard/${user.role}`);
+      }, 0);
+      return () => clearTimeout(timeout);
     }
   }, [isAuthenticated, user, router]);
 
-  if (isAuthenticated) {
+  // Show loading spinner while redirecting
+  if (isAuthenticated && user?.role) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0a0a0f]">
         <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
@@ -31,6 +36,7 @@ export default function HomePage() {
     );
   }
 
+  // Public landing page
   return (
     <>
       <Navbar />
