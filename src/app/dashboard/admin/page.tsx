@@ -1,19 +1,45 @@
 "use client";
+
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
-  FolderKanban, Users, Star, TrendingUp, CheckCircle2, Clock,
-  AlertCircle, Crown, Plus, ArrowRight, Activity, DollarSign
+  FolderKanban,
+  Users,
+  Star,
+  TrendingUp,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  Crown,
+  Plus,
+  ArrowRight,
+  Activity,
+  DollarSign
 } from "lucide-react";
-import { StatsCard, Badge, ProgressBar, SectionHeader, Card, Button, Skeleton } from "@/components/ui";
+import {
+  StatsCard,
+  Badge,
+  ProgressBar,
+  SectionHeader,
+  Card,
+  Button,
+  Skeleton
+} from "@/components/ui";
 import { dashboardAPI, projectsAPI, reviewsAPI } from "@/lib/api";
 import { Project, Review } from "@/types";
 import { formatCurrency, formatDate, getStatusColor, truncate } from "@/lib/utils";
 import { useAuthStore } from "@/lib/store/authStore";
 import Link from "next/link";
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, BarChart, Bar
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar
 } from "recharts";
 
 const chartData = [
@@ -40,11 +66,18 @@ export default function AdminDashboard() {
           projectsAPI.getAll(),
           reviewsAPI.getAll(),
         ]);
+
         setStats(statsRes.data);
+
         const allProjects = projectsRes.data.projects || [];
-        setProjects(allProjects.filter((p: Project) => p.status === "in-progress").slice(0, 5));
+        setProjects(
+          allProjects.filter((p: Project) => p.status === "in-progress").slice(0, 5)
+        );
+
         const reviews = reviewsRes.data.reviews || [];
-        setPendingReviews(reviews.filter((r: Review) => r.status === "pending").slice(0, 3));
+        setPendingReviews(
+          reviews.filter((r: Review) => r.status === "pending").slice(0, 3)
+        );
       } catch {
         // Use mock data for demo
         setStats({
@@ -59,6 +92,7 @@ export default function AdminDashboard() {
         setLoading(false);
       }
     };
+
     fetchData();
   }, []);
 
@@ -117,7 +151,9 @@ export default function AdminDashboard() {
           <p className="text-slate-400 mt-1">Here's what's happening across your agency today.</p>
         </div>
         <Link href="/dashboard/admin/projects/new">
-          <Button variant="primary" icon={<Plus size={16} />} size="md">New Project</Button>
+          <Button variant="primary" icon={<Plus size={16} />} size="md">
+            New Project
+          </Button>
         </Link>
       </div>
 
@@ -125,8 +161,7 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {loading
           ? Array(4).fill(0).map((_, i) => <Skeleton key={i} className="h-36" />)
-          : statCards.map((card, i) => <StatsCard key={card.title} {...card} delay={i * 0.1} />)
-        }
+          : statCards.map((card, i) => <StatsCard key={card.title} {...card} delay={i * 0.1} />)}
       </div>
 
       {/* Charts Row */}
@@ -144,13 +179,37 @@ export default function AdminDashboard() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                <XAxis dataKey="month" tick={{ fill: "#64748b", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: "#64748b", fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `₦${(v / 1000).toFixed(0)}k`} />
-                <Tooltip
-                  contentStyle={{ background: "rgba(10,10,20,0.95)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "12px", color: "#f1f5f9" }}
-                  formatter={(value: number) => [formatCurrency(value), "Revenue"]}
+                <XAxis
+                  dataKey="month"
+                  tick={{ fill: "#64748b", fontSize: 12 }}
+                  axisLine={false}
+                  tickLine={false}
                 />
-                <Area type="monotone" dataKey="revenue" stroke="#1a4dff" strokeWidth={2} fill="url(#revenueGrad)" />
+                <YAxis
+                  tick={{ fill: "#64748b", fontSize: 12 }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(v) => `₦${(v / 1000).toFixed(0)}k`}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: "rgba(10,10,20,0.95)",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: "12px",
+                    color: "#f1f5f9",
+                  }}
+                  formatter={(value) => [
+                    formatCurrency(Number(value ?? 0)),
+                    "Revenue",
+                  ]}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="revenue"
+                  stroke="#1a4dff"
+                  strokeWidth={2}
+                  fill="url(#revenueGrad)"
+                />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -163,10 +222,20 @@ export default function AdminDashboard() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                <XAxis dataKey="month" tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
+                <XAxis
+                  dataKey="month"
+                  tick={{ fill: "#64748b", fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                />
                 <YAxis tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
                 <Tooltip
-                  contentStyle={{ background: "rgba(10,10,20,0.95)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "12px", color: "#f1f5f9" }}
+                  contentStyle={{
+                    background: "rgba(10,10,20,0.95)",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: "12px",
+                    color: "#f1f5f9",
+                  }}
                 />
                 <Bar dataKey="projects" fill="#1a4dff" radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -183,12 +252,16 @@ export default function AdminDashboard() {
             title="Active Projects"
             action={
               <Link href="/dashboard/admin/projects">
-                <button className="text-brand-400 text-sm hover:text-brand-300 flex items-center gap-1">View all <ArrowRight size={14} /></button>
+                <button className="text-brand-400 text-sm hover:text-brand-300 flex items-center gap-1">
+                  View all <ArrowRight size={14} />
+                </button>
               </Link>
             }
           />
           {loading ? (
-            <div className="space-y-3">{Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-20" />)}</div>
+            <div className="space-y-3">
+              {Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-20" />)}
+            </div>
           ) : projects.length === 0 ? (
             <div className="text-center py-8 text-slate-500">
               <FolderKanban size={32} className="mx-auto mb-2 opacity-50" />
@@ -207,9 +280,19 @@ export default function AdminDashboard() {
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <p className="text-white font-medium text-sm">{project.title}</p>
-                      <p className="text-slate-500 text-xs mt-0.5">{project.clientName} · Due {formatDate(project.deliveryDate)}</p>
+                      <p className="text-slate-500 text-xs mt-0.5">
+                        {project.clientName} · Due {formatDate(project.deliveryDate)}
+                      </p>
                     </div>
-                    <Badge variant={project.status === "completed" ? "success" : project.status === "in-progress" ? "warning" : "info"}>
+                    <Badge
+                      variant={
+                        project.status === "completed"
+                          ? "success"
+                          : project.status === "in-progress"
+                          ? "warning"
+                          : "info"
+                      }
+                    >
                       {project.status}
                     </Badge>
                   </div>
@@ -227,7 +310,9 @@ export default function AdminDashboard() {
             subtitle="Awaiting your approval"
             action={
               <Link href="/dashboard/admin/reviews">
-                <button className="text-brand-400 text-sm hover:text-brand-300 flex items-center gap-1">View all <ArrowRight size={14} /></button>
+                <button className="text-brand-400 text-sm hover:text-brand-300 flex items-center gap-1">
+                  View all <ArrowRight size={14} />
+                </button>
               </Link>
             }
           />
@@ -248,16 +333,28 @@ export default function AdminDashboard() {
                       <p className="text-white font-medium text-sm">{review.clientName}</p>
                       <p className="text-slate-500 text-xs">{review.projectName}</p>
                       <div className="flex gap-0.5 mt-1">
-                        {Array(5).fill(0).map((_, i) => (
-                          <Star key={i} size={12} className={i < review.rating ? "text-gold-400 fill-gold-400" : "text-slate-600"} />
-                        ))}
+                        {Array(5)
+                          .fill(0)
+                          .map((_, i) => (
+                            <Star
+                              key={i}
+                              size={12}
+                              className={
+                                i < review.rating ? "text-gold-400 fill-gold-400" : "text-slate-600"
+                              }
+                            />
+                          ))}
                       </div>
                       <p className="text-slate-400 text-xs mt-1 line-clamp-2">{review.comment}</p>
                     </div>
                   </div>
                   <div className="flex gap-2 mt-3">
-                    <Button variant="primary" size="sm" className="flex-1">Approve</Button>
-                    <Button variant="danger" size="sm" className="flex-1">Reject</Button>
+                    <Button variant="primary" size="sm" className="flex-1">
+                      Approve
+                    </Button>
+                    <Button variant="danger" size="sm" className="flex-1">
+                      Reject
+                    </Button>
                   </div>
                 </div>
               ))}
