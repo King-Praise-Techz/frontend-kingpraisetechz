@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, ChangeEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { motion } from "framer-motion";
 
 import {
   ArrowLeft,
@@ -16,7 +15,6 @@ import {
   CheckCircle2,
   AlertCircle,
   Plus,
-  Edit2,
 } from "lucide-react";
 
 import {
@@ -32,17 +30,17 @@ import {
   Skeleton,
 } from "@/components/ui";
 
-import { projectsAPI, tasksAPI } from "@/lib/api";
+import { projectsAPI } from "@/lib/api";
 import { Project, Task, Milestone } from "@/types";
 
-import { formatCurrency, formatDate, timeAgo } from "@/lib/utils";
+import { formatCurrency, formatDate } from "@/lib/utils";
 
 import Link from "next/link";
 import toast from "react-hot-toast";
 
 export default function AdminProjectDetailPage() {
-  const params = useParams();
-  const id = Array.isArray(params?.id) ? params.id[0] : params?.id;
+  const params = useParams<{ id: string }>();
+  const id = params?.id;
 
   const router = useRouter();
 
@@ -59,27 +57,38 @@ export default function AdminProjectDetailPage() {
   });
 
   const refreshProject = async (projectId: string) => {
-    const res = await projectsAPI.getById(projectId);
-    setProject(res.data?.project || res.data);
+    try {
+      const res = await projectsAPI.getById(projectId);
+      setProject(res.data?.project || res.data);
+    } catch {
+      toast.error("Failed to refresh project");
+    }
   };
 
   useEffect(() => {
     if (!id) return;
 
-    projectsAPI
-      .getById(id)
-      .then((res: any) => setProject(res.data?.project || res.data))
-      .catch(() => toast.error("Failed to load project"))
-      .finally(() => setLoading(false));
+    const fetchProject = async () => {
+      try {
+        const res = await projectsAPI.getById(id);
+        setProject(res.data?.project || res.data);
+      } catch {
+        toast.error("Failed to load project");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProject();
   }, [id]);
 
   const handleAddMilestone = async () => {
-    if (!project) return;
+    if (!project?.id) return;
 
     setSubmitting(true);
 
     try {
-      await projectsAPI.uploadMilestone(project.id, {
+      await projectsAPI.update(project.id, {
         ...milestoneForm,
         order: parseInt(milestoneForm.order),
       });
@@ -107,13 +116,11 @@ export default function AdminProjectDetailPage() {
     milestoneId: string,
     data: Partial<Milestone>
   ) => {
-    if (!project) return;
+    if (!project?.id) return;
 
     try {
-      await projectsAPI.updateMilestone(project.id, milestoneId, data);
-
+      await projectsAPI.update(project.id, milestoneId);
       toast.success("Milestone updated");
-
       await refreshProject(project.id);
     } catch {
       toast.error("Failed to update milestone");
@@ -204,35 +211,27 @@ export default function AdminProjectDetailPage() {
         {[
           {
             label: "Budget",
-            value: formatCurrency(project.budget),
-            icon: <DollarSign size={16} className="text-gold-400" />,
-            bg: "bg-gold-500/10",
+            value: formatCurrency(project.budget ?? 0),
+            icon: <DollarSign size={16} />,
           },
           {
             label: "Delivery Date",
-            value: formatDate(project.deliveryDate),
-            icon: <Calendar size={16} className="text-brand-400" />,
-            bg: "bg-brand-500/10",
+            value: formatDate(project.deliveryDate ?? ""),
+            icon: <Calendar size={16} />,
           },
           {
             label: "Team Members",
             value: `${project.assignedTeam?.length || 0} members`,
-            icon: <Users size={16} className="text-emerald-400" />,
-            bg: "bg-emerald-500/10",
+            icon: <Users size={16} />,
           },
           {
             label: "Tasks",
             value: `${completedTasks}/${totalTasks} done`,
-            icon: <CheckSquare size={16} className="text-purple-400" />,
-            bg: "bg-purple-500/10",
+            icon: <CheckSquare size={16} />,
           },
         ].map((item) => (
           <div key={item.label} className="glass-card p-4">
-            <div
-              className={`w-8 h-8 rounded-lg ${item.bg} flex items-center justify-center mb-3`}
-            >
-              {item.icon}
-            </div>
+            <div className="mb-3">{item.icon}</div>
 
             <p className="text-slate-400 text-xs">{item.label}</p>
 
@@ -250,11 +249,11 @@ export default function AdminProjectDetailPage() {
           <h3 className="text-white font-semibold">Overall Progress</h3>
 
           <span className="text-white font-bold text-lg">
-            {project.progress}%
+            {project.progress ?? 0}%
           </span>
         </div>
 
-        <ProgressBar value={project.progress} height={10} />
+        <ProgressBar value={project.progress ?? 0} height={10} />
       </Card>
 
       {/* Milestones */}
@@ -288,7 +287,7 @@ export default function AdminProjectDetailPage() {
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-3">
-                    <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5 bg-white/10 border border-white/15">
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center bg-white/10">
                       <span className="text-xs text-slate-300 font-bold">
                         {i + 1}
                       </span>
@@ -326,13 +325,12 @@ export default function AdminProjectDetailPage() {
         <SectionHeader title="Client Information" />
 
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-brand-500/20 flex items-center justify-center text-brand-400 font-bold font-display text-lg">
+          <div className="w-12 h-12 rounded-xl bg-brand-500/20 flex items-center justify-center text-brand-400 font-bold">
             {project.clientName?.charAt(0) || "C"}
           </div>
 
           <div>
             <p className="text-white font-semibold">{project.clientName}</p>
-
             <p className="text-slate-400 text-sm">{project.clientEmail}</p>
           </div>
         </div>
@@ -347,19 +345,10 @@ export default function AdminProjectDetailPage() {
         size="md"
       >
         <div className="space-y-4">
-          <div className="p-3 rounded-xl bg-brand-500/5 border border-brand-500/20 flex items-start gap-2">
-            <AlertCircle size={14} className="text-brand-400 mt-0.5 shrink-0" />
-
-            <p className="text-xs text-slate-300">
-              This milestone will be sent to {project.clientEmail} by email and
-              appear on their dashboard.
-            </p>
-          </div>
-
           <Input
             label="Milestone Title *"
             value={milestoneForm.title}
-            onChange={(e: any) =>
+            onChange={(e: ChangeEvent<HTMLInputElement>) =>
               setMilestoneForm({ ...milestoneForm, title: e.target.value })
             }
           />
@@ -367,7 +356,7 @@ export default function AdminProjectDetailPage() {
           <Textarea
             label="Description"
             value={milestoneForm.description}
-            onChange={(e: any) =>
+            onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
               setMilestoneForm({
                 ...milestoneForm,
                 description: e.target.value,
@@ -380,7 +369,7 @@ export default function AdminProjectDetailPage() {
               label="Due Date"
               type="date"
               value={milestoneForm.dueDate}
-              onChange={(e: any) =>
+              onChange={(e: ChangeEvent<HTMLInputElement>) =>
                 setMilestoneForm({
                   ...milestoneForm,
                   dueDate: e.target.value,
@@ -392,7 +381,7 @@ export default function AdminProjectDetailPage() {
               label="Order"
               type="number"
               value={milestoneForm.order}
-              onChange={(e: any) =>
+              onChange={(e: ChangeEvent<HTMLInputElement>) =>
                 setMilestoneForm({
                   ...milestoneForm,
                   order: e.target.value,

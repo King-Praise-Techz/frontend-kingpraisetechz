@@ -77,7 +77,7 @@ export default function AdminProjectDetailPage() {
     setSubmitting(true);
 
     try {
-      await projectsAPI.uploadMilestone(project.id, {
+      await projectsAPI.update(project.id, {
         ...milestoneForm,
         order: parseInt(milestoneForm.order),
       });
@@ -108,7 +108,7 @@ export default function AdminProjectDetailPage() {
     if (!project) return;
 
     try {
-      await projectsAPI.updateMilestone(project.id, milestoneId, data);
+      await projectsAPI.update(project.id, milestoneId);
       toast.success("Milestone updated");
 
       await refreshProject();

@@ -44,7 +44,7 @@ export default function HomePage() {
       <Features />
       <About />
       <Pricing />
-      <Projects />
+      <Projects items={[]} />
       <Reviews />
       <Footer />
     </>
