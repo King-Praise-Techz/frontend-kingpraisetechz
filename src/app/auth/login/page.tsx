@@ -4,18 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
-
-import {
-  Eye,
-  EyeOff,
-  ArrowRight,
-  Crown,
-  Users,
-  Zap,
-  Shield,
-  ChevronLeft
-} from "lucide-react";
-
+import { Eye, EyeOff, ArrowRight, Crown, Users, Zap, Shield, ChevronLeft } from "lucide-react";
 import { useAuthStore } from "@/lib/store/authStore";
 import { cn } from "@/lib/utils";
 
@@ -25,350 +14,276 @@ const roleConfig = {
   client: {
     label: "Client",
     description: "Track your project progress and milestones",
-    icon: <Zap size={20} />,
-    color: "from-indigo-500 to-indigo-400",
-    glowColor: "rgba(99,102,241,0.35)",
-    bg: "bg-indigo-500/10",
-    border: "border-indigo-500/30",
-    text: "text-indigo-400"
+    icon: <Zap size={18} />,
+    accent: "var(--brand)",
+    accentDim: "var(--brand-dim)",
+    accentBorder: "var(--brand-border)",
+    gradient: "linear-gradient(135deg, #5c6ef8, #818cf8)",
   },
   team: {
     label: "Team Member",
     description: "Manage tasks and deliverables",
-    icon: <Users size={20} />,
-    color: "from-emerald-500 to-teal-400",
-    glowColor: "rgba(16,185,129,0.35)",
-    bg: "bg-emerald-500/10",
-    border: "border-emerald-500/30",
-    text: "text-emerald-400"
+    icon: <Users size={18} />,
+    accent: "var(--emerald)",
+    accentDim: "var(--emerald-dim)",
+    accentBorder: "var(--emerald-border)",
+    gradient: "linear-gradient(135deg, #34d399, #6ee7b7)",
   },
   admin: {
-    label: "Admin",
+    label: "Administrator",
     description: "Full platform management access",
-    icon: <Crown size={20} />,
-    color: "from-amber-500 to-yellow-400",
-    glowColor: "rgba(245,158,11,0.35)",
-    bg: "bg-amber-500/10",
-    border: "border-amber-500/30",
-    text: "text-amber-400"
-  }
+    icon: <Crown size={18} />,
+    accent: "var(--gold)",
+    accentDim: "var(--gold-dim)",
+    accentBorder: "var(--gold-border)",
+    gradient: "linear-gradient(135deg, #f0a429, #fbbf24)",
+  },
 };
 
 export default function LoginPage() {
-
   const router = useRouter();
   const { login, isLoading } = useAuthStore();
-
   const [step, setStep] = useState<1 | 2>(1);
   const [selectedRole, setSelectedRole] = useState<LoginRole | null>(null);
-
   const [showPassword, setShowPassword] = useState(false);
-
-  const [formData, setFormData] = useState({
-    email: "",
-    password: ""
-  });
+  const [formData, setFormData] = useState({ email: "", password: "" });
 
   const handleRoleSelect = (role: LoginRole) => {
-
     setSelectedRole(role);
-
-    if (role === "admin") {
-      setFormData({
-        email: "chibuksai@gmail.com",
-        password: ""
-      });
-    } else {
-      setFormData({
-        email: "",
-        password: ""
-      });
-    }
-
-    setTimeout(() => setStep(2), 200);
+    setFormData({ email: role === "admin" ? "chibuksai@gmail.com" : "", password: "" });
+    setTimeout(() => setStep(2), 180);
   };
 
   const handleLogin = async (e: React.FormEvent) => {
-
     e.preventDefault();
-
     if (!selectedRole) return;
-
     try {
-
-      const result = await login(
-        formData.email,
-        formData.password
-      );
-
-      if (result.needs2FASetup) {
-        router.push("/auth/2fa?setup=true");
-        return;
-      }
-
-      if (result.requires2FA) {
-        router.push("/auth/2fa");
-        return;
-      }
-
+      const result = await login(formData.email, formData.password);
+      if (result.needs2FASetup) { router.push("/auth/2fa?setup=true"); return; }
+      if (result.requires2FA)   { router.push("/auth/2fa"); return; }
       router.push("/dashboard/admin");
-
     } catch {}
-
   };
 
   const config = selectedRole ? roleConfig[selectedRole] : null;
 
   return (
-
-    <div className="min-h-screen bg-[#0b0f19] flex items-center justify-center px-6">
-
-      <div className="w-full max-w-[460px]">
+    <div
+      className="min-h-screen flex items-center justify-center px-5"
+      style={{
+        background: `
+          radial-gradient(ellipse 55% 45% at 15% -5%, rgba(92,110,248,0.16) 0%, transparent 70%),
+          radial-gradient(ellipse 45% 40% at 85% 105%, rgba(92,110,248,0.09) 0%, transparent 70%),
+          var(--bg)
+        `,
+      }}
+    >
+      <div className="w-full max-w-[430px]">
 
         {/* Logo */}
-
-        <div className="flex items-center justify-center gap-3 mb-10">
-
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center shadow-lg">
-            <Crown size={18} />
+        <motion.div
+          initial={{ opacity: 0, y: -12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center justify-center gap-3 mb-10"
+        >
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center"
+            style={{ background: "linear-gradient(135deg, var(--brand), #818cf8)", boxShadow: "0 4px 20px var(--brand-glow)" }}
+          >
+            <Crown size={17} color="#fff" />
           </div>
-
-          <span className="text-xl font-bold text-white">
+          <span className="text-lg font-bold" style={{ fontFamily: "var(--font-display)", color: "var(--text-1)" }}>
             King Praise Techz
           </span>
+        </motion.div>
 
-        </div>
-
-        {/* Progress */}
-
+        {/* Step dots */}
         <div className="flex gap-2 mb-8">
-
-          <div className={cn(
-            "h-1 flex-1 rounded-full",
-            step >= 1 ? "bg-indigo-500" : "bg-white/10"
-          )} />
-
-          <div className={cn(
-            "h-1 flex-1 rounded-full",
-            step >= 2 ? "bg-indigo-500" : "bg-white/10"
-          )} />
-
+          {[1, 2].map(s => (
+            <div
+              key={s}
+              className="h-1 flex-1 rounded-full transition-all duration-400"
+              style={{ background: s <= step ? "var(--brand)" : "rgba(255,255,255,0.08)" }}
+            />
+          ))}
         </div>
 
         <AnimatePresence mode="wait">
 
-          {/* STEP 1 */}
-
+          {/* ── Step 1: Role select ── */}
           {step === 1 && (
-
             <motion.div
               key="roles"
-              initial={{ opacity: 0, x: 40 }}
+              initial={{ opacity: 0, x: 30 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -40 }}
+              exit={{ opacity: 0, x: -30 }}
+              transition={{ duration: 0.22 }}
             >
-
-              <h1 className="text-3xl font-bold text-white mb-2">
+              <h1 className="text-3xl font-bold mb-1.5" style={{ fontFamily: "var(--font-display)", color: "var(--text-1)" }}>
                 Welcome back
               </h1>
+              <p className="text-sm mb-7" style={{ color: "var(--text-2)" }}>Choose how you'd like to sign in</p>
 
-              <p className="text-slate-400 mb-8">
-                Choose how you'd like to sign in
-              </p>
-
-              <div className="space-y-4">
-
+              <div className="space-y-3">
                 {(Object.entries(roleConfig) as [LoginRole, typeof roleConfig.client][]).map(([role, cfg]) => (
-
                   <button
                     key={role}
                     onClick={() => handleRoleSelect(role)}
-                    className="w-full p-6 rounded-2xl border border-white/10 bg-white/[0.02] hover:border-white/20 transition"
+                    className="w-full p-5 rounded-2xl flex items-center gap-4 text-left transition-all duration-200 group"
+                    style={{ background: "var(--surface-1)", border: "1px solid var(--border)" }}
+                    onMouseEnter={e => {
+                      (e.currentTarget as HTMLElement).style.borderColor = cfg.accentBorder;
+                      (e.currentTarget as HTMLElement).style.background = cfg.accentDim;
+                    }}
+                    onMouseLeave={e => {
+                      (e.currentTarget as HTMLElement).style.borderColor = "var(--border)";
+                      (e.currentTarget as HTMLElement).style.background = "var(--surface-1)";
+                    }}
                   >
-
-                    <div className="flex items-center gap-4">
-
-                      <div className={cn(
-                        "w-12 h-12 rounded-xl flex items-center justify-center",
-                        cfg.bg
-                      )}>
-                        <span className={cfg.text}>
-                          {cfg.icon}
-                        </span>
-                      </div>
-
-                      <div className="text-left flex-1">
-
-                        <p className="font-semibold text-white">
-                          {cfg.label}
-                        </p>
-
-                        <p className="text-sm text-slate-400">
-                          {cfg.description}
-                        </p>
-
-                      </div>
-
-                      <ArrowRight className="text-slate-500" />
-
+                    <div
+                      className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
+                      style={{ background: cfg.accentDim, border: `1px solid ${cfg.accentBorder}` }}
+                    >
+                      <span style={{ color: cfg.accent }}>{cfg.icon}</span>
                     </div>
-
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm" style={{ color: "var(--text-1)" }}>{cfg.label}</p>
+                      <p className="text-xs mt-0.5" style={{ color: "var(--text-2)" }}>{cfg.description}</p>
+                    </div>
+                    <ArrowRight size={16} style={{ color: "var(--text-3)" }} />
                   </button>
-
                 ))}
-
               </div>
 
-              <p className="text-center text-sm text-slate-400 mt-8">
+              <p className="text-center text-sm mt-8" style={{ color: "var(--text-2)" }}>
                 Don't have an account?{" "}
-                <Link
-                  href="/auth/signup"
-                  className="text-indigo-400"
-                >
+                <Link href="/auth/signup" style={{ color: "var(--brand)" }} className="font-medium hover:underline">
                   Sign up
                 </Link>
               </p>
-
             </motion.div>
-
           )}
 
-          {/* STEP 2 */}
-
+          {/* ── Step 2: Sign in form ── */}
           {step === 2 && config && (
-
             <motion.div
               key="login"
-              initial={{ opacity: 0, x: 40 }}
+              initial={{ opacity: 0, x: 30 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -40 }}
+              exit={{ opacity: 0, x: -30 }}
+              transition={{ duration: 0.22 }}
             >
-
               <button
-                onClick={() => {
-                  setStep(1);
-                  setSelectedRole(null);
-                }}
-                className="flex items-center gap-2 text-slate-400 mb-6"
+                onClick={() => { setStep(1); setSelectedRole(null); }}
+                className="flex items-center gap-1.5 text-sm mb-6 transition-colors"
+                style={{ color: "var(--text-2)" }}
+                onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = "var(--text-1)")}
+                onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = "var(--text-2)")}
               >
-                <ChevronLeft size={16}/>
-                Back
+                <ChevronLeft size={15} /> Back
               </button>
 
-              <div className={cn(
-                "inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-6 text-sm border",
-                config.bg,
-                config.border,
-                config.text
-              )}>
+              {/* Role pill */}
+              <div
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold mb-6"
+                style={{
+                  background: config.accentDim,
+                  border: `1px solid ${config.accentBorder}`,
+                  color: config.accent,
+                }}
+              >
                 {config.icon}
-                <span>Signing in as {config.label}</span>
+                Signing in as {config.label}
               </div>
 
-              <form
-                onSubmit={handleLogin}
-                className="space-y-4"
-              >
+              <h1 className="text-3xl font-bold mb-1" style={{ fontFamily: "var(--font-display)", color: "var(--text-1)" }}>
+                Sign in
+              </h1>
+              <p className="text-sm mb-7" style={{ color: "var(--text-2)" }}>Enter your credentials to continue</p>
 
-                <input
-                  type="email"
-                  placeholder="Email"
-                  className="input"
-                  value={formData.email}
-                  onChange={(e)=>
-                    setFormData({
-                      ...formData,
-                      email:e.target.value
-                    })
-                  }
-                  required
-                />
-
-                <div className="relative">
-
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium" style={{ color: "var(--text-2)" }}>Email address</label>
                   <input
-                    type={showPassword ? "text":"password"}
-                    placeholder="Password"
-                    className="input pr-10"
-                    value={formData.password}
-                    onChange={(e)=>
-                      setFormData({
-                        ...formData,
-                        password:e.target.value
-                      })
-                    }
+                    type="email"
+                    className="input"
+                    placeholder="you@example.com"
+                    value={formData.email}
+                    onChange={e => setFormData({ ...formData, email: e.target.value })}
                     required
                   />
+                </div>
 
-                  <button
-                    type="button"
-                    onClick={()=>setShowPassword(!showPassword)}
-                    className="absolute right-3 top-3 text-slate-400"
-                  >
-                    {showPassword
-                      ? <EyeOff size={16}/>
-                      : <Eye size={16}/>
-                    }
-                  </button>
-
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium" style={{ color: "var(--text-2)" }}>Password</label>
+                    <Link href="/auth/forgot-password" className="text-xs hover:underline" style={{ color: "var(--brand)" }}>
+                      Forgot password?
+                    </Link>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      className="input pr-11"
+                      placeholder="••••••••"
+                      value={formData.password}
+                      onChange={e => setFormData({ ...formData, password: e.target.value })}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
+                      style={{ color: "var(--text-3)" }}
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                 </div>
 
                 <motion.button
                   type="submit"
                   disabled={isLoading}
-                  className={cn(
-                    "btn-primary bg-gradient-to-r",
-                    config.color
-                  )}
+                  whileHover={!isLoading ? { scale: 1.01 } : {}}
+                  whileTap={!isLoading ? { scale: 0.98 } : {}}
+                  className="btn btn-full btn-lg mt-2"
                   style={{
-                    boxShadow:`0 0 20px ${config.glowColor}`
+                    background: config.gradient,
+                    color: "#fff",
+                    boxShadow: `0 4px 22px ${config.accentBorder}`,
+                    opacity: isLoading ? 0.6 : 1,
                   }}
                 >
-
-                  {isLoading
-                    ? "Signing in..."
-                    : "Sign In"
-                  }
-
-                  <ArrowRight size={16}/>
-
+                  {isLoading ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : null}
+                  {isLoading ? "Signing in…" : "Sign In"}
+                  {!isLoading && <ArrowRight size={15} />}
                 </motion.button>
 
                 {selectedRole !== "admin" && (
-
-                  <div className="flex items-center gap-2 p-3 rounded-xl bg-indigo-500/5 border border-indigo-500/20">
-
-                    <Shield size={14} className="text-indigo-400"/>
-
-                    <p className="text-xs text-slate-400">
-                      Two-Factor Authentication required
+                  <div
+                    className="flex items-center gap-2.5 p-3 rounded-xl"
+                    style={{ background: "var(--brand-dim)", border: "1px solid var(--brand-border)" }}
+                  >
+                    <Shield size={14} style={{ color: "var(--brand)" }} />
+                    <p className="text-xs" style={{ color: "var(--text-2)" }}>
+                      Two-Factor Authentication required on login
                     </p>
-
                   </div>
-
                 )}
-
               </form>
 
-              <div className="text-center mt-6">
-
-                <Link
-                  href="/auth/forgot-password"
-                  className="text-sm text-indigo-400"
-                >
-                  Forgot password?
+              <p className="text-center text-sm mt-8" style={{ color: "var(--text-2)" }}>
+                Don't have an account?{" "}
+                <Link href="/auth/signup" style={{ color: "var(--brand)" }} className="font-medium hover:underline">
+                  Sign up
                 </Link>
-
-              </div>
-
+              </p>
             </motion.div>
-
           )}
-
         </AnimatePresence>
-
       </div>
-
     </div>
   );
 }
