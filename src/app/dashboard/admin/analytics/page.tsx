@@ -22,7 +22,7 @@ import {
   Cell,
 } from "recharts";
 
-import { StatsCard, Card, SectionHeader } from "@/components/ui";
+import { StatsCard, Card, SectionHeader, ProgressBar } from "@/components/ui";
 import { formatCurrency } from "@/lib/utils";
 
 type Period = "7d" | "30d" | "90d";
@@ -121,32 +121,44 @@ export default function AdminAnalyticsPage() {
           title="Total Revenue"
           value="₦4.29M"
           icon={<DollarSign size={20} />}
-          accentColor="rgb(245,158,11)"
+          iconBg="bg-amber-500/15"
+          iconColor="text-amber-400"
+          glowColor="rgba(245,158,11,0.4)"
           trend={{ value: 18, label: "vs last period" }}
+          delay={0.1}
         />
 
         <StatsCard
           title="Projects Completed"
           value="37"
           icon={<FolderKanban size={20} />}
-          accentColor="rgb(26,77,255)"
+          iconBg="bg-blue-500/15"
+          iconColor="text-blue-400"
+          glowColor="rgba(59,130,246,0.4)"
           trend={{ value: 12, label: "vs last period" }}
+          delay={0.2}
         />
 
         <StatsCard
           title="Client Satisfaction"
           value="4.8/5"
           icon={<Star size={20} />}
-          accentColor="rgb(16,185,129)"
+          iconBg="bg-emerald-500/15"
+          iconColor="text-emerald-400"
+          glowColor="rgba(16,185,129,0.4)"
           trend={{ value: 5, label: "vs last period" }}
+          delay={0.3}
         />
 
         <StatsCard
           title="Team Efficiency"
           value="94%"
           icon={<Target size={20} />}
-          accentColor="rgb(168,85,247)"
+          iconBg="bg-purple-500/15"
+          iconColor="text-purple-400"
+          glowColor="rgba(168,85,247,0.4)"
           trend={{ value: 3, label: "task completion" }}
+          delay={0.4}
         />
 
       </div>
@@ -154,14 +166,16 @@ export default function AdminAnalyticsPage() {
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* Revenue Chart */}
+        {/* Revenue */}
         <Card className="lg:col-span-2">
+
           <SectionHeader
             title="Revenue Trend"
             subtitle="Monthly revenue over time"
           />
 
           <div className="h-64">
+
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={monthlyData}>
 
@@ -203,17 +217,21 @@ export default function AdminAnalyticsPage() {
 
               </AreaChart>
             </ResponsiveContainer>
+
           </div>
+
         </Card>
 
-        {/* Category Chart */}
+        {/* Category */}
         <Card>
+
           <SectionHeader
             title="Project Categories"
             subtitle="Revenue by type"
           />
 
           <div className="h-48">
+
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
 
@@ -234,12 +252,15 @@ export default function AdminAnalyticsPage() {
 
               </PieChart>
             </ResponsiveContainer>
+
           </div>
+
         </Card>
 
       </div>
 
       {/* Team Performance */}
+
       <Card>
 
         <SectionHeader
@@ -247,9 +268,10 @@ export default function AdminAnalyticsPage() {
           subtitle="Task completion rates"
         />
 
-        <div className="space-y-3">
+        <div className="space-y-4">
 
           {teamPerformance.map((member, i) => {
+
             const rate = Math.round(
               (member.completed / member.tasks) * 100
             );
@@ -260,49 +282,28 @@ export default function AdminAnalyticsPage() {
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.08 }}
-                className="flex items-center gap-3"
               >
 
-                <div className="w-8 h-8 rounded-lg bg-brand-500/20 flex items-center justify-center text-brand-400 font-bold text-xs">
-                  {member.name[0]}
+                <div className="flex justify-between mb-2 text-sm">
+                  <span className="text-white font-medium">
+                    {member.name}
+                  </span>
+
+                  <span className="text-slate-400">
+                    {member.completed}/{member.tasks}
+                  </span>
                 </div>
 
-                <div className="flex-1">
-
-                  <div className="flex justify-between mb-1">
-                    <span className="text-white text-sm font-medium">
-                      {member.name}
-                    </span>
-
-                    <span className="text-xs text-slate-400">
-                      {member.completed}/{member.tasks} tasks
-                    </span>
-                  </div>
-
-                  <div className="progress-bar h-[6px]">
-
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${rate}%` }}
-                      transition={{ duration: 1 }}
-                      className="progress-fill h-full"
-                      style={{
-                        background:
-                          rate >= 90
-                            ? "#10b981"
-                            : rate >= 75
-                            ? "#1a4dff"
-                            : "#f59e0b",
-                      }}
-                    />
-
-                  </div>
-
-                </div>
-
-                <span className="text-xs font-bold text-white w-10 text-right">
-                  {rate}%
-                </span>
+                <ProgressBar
+                  value={rate}
+                  color={
+                    rate >= 90
+                      ? "#10b981"
+                      : rate >= 75
+                      ? "#1a4dff"
+                      : "#f59e0b"
+                  }
+                />
 
               </motion.div>
             );
