@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@source "../";
 
 @theme {
   --font-display: "Clash Display", "Syne", system-ui, sans-serif;
