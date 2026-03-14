@@ -175,7 +175,7 @@ export default function Pricing() {
 
         <p className="text-center text-sm mt-10" style={{ color: "var(--text-3)" }}>
           All prices are in Naira (NGN). Payments split across milestones. Need something different?{" "}
-          <a href="#contact" style={{ color: "var(--brand)" }} className="hover:underline">Let's talk.</a>
+          <a href="/signup" style={{ color: "var(--brand)" }} className="hover:underline">Let's talk.</a>
         </p>
       </div>
     </section>
