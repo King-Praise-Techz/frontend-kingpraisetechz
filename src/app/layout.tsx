@@ -89,7 +89,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="https://api.fontshare.com/v2/css?f[]=clash-display@400,500,600,700&f[]=satoshi@400,500,600,700&display=swap"
           rel="stylesheet"
         />
-        
+        <meta name="google-site-verification" content="gs4tSMtK0ZcQ986t0Ul65oHijKJIZZAcs5y3gMjU3wU" />
         <meta name="theme-color" content="#0a0a0f" />
       </head>
       <body className="noise-overlay mesh-bg min-h-screen antialiased">
