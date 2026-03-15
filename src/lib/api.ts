@@ -8,8 +8,6 @@ const RAW_BASE =
   process.env.NEXT_PUBLIC_API_URL ||
   "https://king-praise-techz-backend.onrender.com";
 
-/* Ensure /api exists only once */
-
 export const API_BASE_URL = RAW_BASE.endsWith("/api")
   ? RAW_BASE
   : `${RAW_BASE}/api`;
@@ -20,11 +18,9 @@ export const API_BASE_URL = RAW_BASE.endsWith("/api")
 
 const getToken = (): string | null => {
   if (typeof window === "undefined") return null;
-
   try {
     const raw = localStorage.getItem("kpt-auth-store");
     if (!raw) return null;
-
     const parsed = JSON.parse(raw);
     return parsed?.state?.token || null;
   } catch {
@@ -38,7 +34,6 @@ const getToken = (): string | null => {
 
 const buildQuery = (params?: Record<string, unknown>) => {
   if (!params) return "";
-
   const query = new URLSearchParams(
     Object.entries(params).reduce((acc, [key, value]) => {
       if (value !== undefined && value !== null) {
@@ -47,7 +42,6 @@ const buildQuery = (params?: Record<string, unknown>) => {
       return acc;
     }, {} as Record<string, string>)
   ).toString();
-
   return query ? `?${query}` : "";
 };
 
@@ -58,18 +52,12 @@ const buildQuery = (params?: Record<string, unknown>) => {
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
-  headers: {
-    "Content-Type": "application/json",
-  },
+  headers: { "Content-Type": "application/json" },
 });
 
 apiClient.interceptors.request.use((config) => {
   const token = getToken();
-
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-
+  if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
@@ -99,9 +87,7 @@ export const fetchWithAuth = async (
       localStorage.removeItem("kpt-auth-store");
       window.location.href = "/auth/login";
     }
-
     const error = await response.json().catch(() => ({}));
-
     throw new Error(error.message || `Request failed (${response.status})`);
   }
 
@@ -110,13 +96,15 @@ export const fetchWithAuth = async (
 
 /* ─────────────────────────────────────────────
    PROJECTS API
+   FIX: update() changed PUT → PATCH (backend uses PATCH)
 ───────────────────────────────────────────── */
 
 export const projectsAPI = {
   getAll: (q?: Record<string, unknown>) =>
     fetchWithAuth(`/projects${buildQuery(q)}`),
 
-  getById: (id: string) => fetchWithAuth(`/projects/${id}`),
+  getById: (id: string) =>
+    fetchWithAuth(`/projects/${id}`),
 
   create: (data: unknown) =>
     fetchWithAuth(`/projects`, {
@@ -126,18 +114,33 @@ export const projectsAPI = {
 
   update: (id: string, data: unknown) =>
     fetchWithAuth(`/projects/${id}`, {
-      method: "PUT",
+      method: "PATCH",
       body: JSON.stringify(data),
     }),
 
   delete: (id: string) =>
-    fetchWithAuth(`/projects/${id}`, {
-      method: "DELETE",
-    }),
+    fetchWithAuth(`/projects/${id}`, { method: "DELETE" }),
+};
+
+/* ─────────────────────────────────────────────
+   CLIENTS API
+   ADDED: was completely missing — needed by ClientLookup
+───────────────────────────────────────────── */
+
+export const clientsAPI = {
+  getAll: (q?: Record<string, unknown>) =>
+    fetchWithAuth(`/clients${buildQuery(q)}`),
+
+  getById: (id: string) =>
+    fetchWithAuth(`/clients/${id}`),
+
+  search: (q: string) =>
+    fetchWithAuth(`/clients${buildQuery({ search: q })}`),
 };
 
 /* ─────────────────────────────────────────────
    REVIEWS API
+   FIX: approve/reject changed POST → PATCH (backend uses PATCH)
 ───────────────────────────────────────────── */
 
 export const reviewsAPI = {
@@ -150,26 +153,30 @@ export const reviewsAPI = {
       body: JSON.stringify(data),
     }),
 
-  approve: (id: string) =>
+  approve: (id: string, data?: unknown) =>
     fetchWithAuth(`/reviews/${id}/approve`, {
-      method: "POST",
+      method: "PATCH",
+      body: JSON.stringify(data ?? {}),
     }),
 
-  reject: (id: string) =>
+  reject: (id: string, data?: unknown) =>
     fetchWithAuth(`/reviews/${id}/reject`, {
-      method: "POST",
+      method: "PATCH",
+      body: JSON.stringify(data ?? {}),
     }),
 };
 
 /* ─────────────────────────────────────────────
    TEAM API
+   All endpoints aligned with backend ✓
 ───────────────────────────────────────────── */
 
 export const teamAPI = {
   getAll: (q?: Record<string, unknown>) =>
     fetchWithAuth(`/team${buildQuery(q)}`),
 
-  getById: (id: string) => fetchWithAuth(`/team/${id}`),
+  getById: (id: string) =>
+    fetchWithAuth(`/team/${id}`),
 
   promoteToAdmin: (id: string, data: unknown) =>
     fetchWithAuth(`/team/${id}/promote`, {
@@ -178,28 +185,85 @@ export const teamAPI = {
     }),
 
   revokeAdmin: (id: string) =>
-    fetchWithAuth(`/team/${id}/revoke-admin`, {
-      method: "POST",
-    }),
+    fetchWithAuth(`/team/${id}/revoke-admin`, { method: "POST" }),
 };
 
 /* ─────────────────────────────────────────────
    TASKS API
+   FIX: update() changed PUT → PATCH (backend uses PATCH)
+   ADDED: getById, create, updateStatus, submit, delete
 ───────────────────────────────────────────── */
 
 export const tasksAPI = {
   getAll: (q?: Record<string, unknown>) =>
     fetchWithAuth(`/tasks${buildQuery(q)}`),
 
-  update: (id: string, data: unknown) =>
-    fetchWithAuth(`/tasks/${id}`, {
-      method: "PUT",
+  getById: (id: string) =>
+    fetchWithAuth(`/tasks/${id}`),
+
+  create: (data: unknown) =>
+    fetchWithAuth(`/tasks`, {
+      method: "POST",
       body: JSON.stringify(data),
     }),
+
+  update: (id: string, data: unknown) =>
+    fetchWithAuth(`/tasks/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+
+  updateStatus: (id: string, data: unknown) =>
+    fetchWithAuth(`/tasks/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+
+  submit: (id: string, data: unknown) =>
+    fetchWithAuth(`/tasks/${id}/submit`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  delete: (id: string) =>
+    fetchWithAuth(`/tasks/${id}`, { method: "DELETE" }),
+};
+
+/* ─────────────────────────────────────────────
+   MILESTONES API
+   FIX: update() changed PUT → PATCH (backend uses PATCH)
+   ADDED: create, updateStatus, delete
+───────────────────────────────────────────── */
+
+export const milestoneAPI = {
+  getAll: (q?: Record<string, unknown>) =>
+    fetchWithAuth(`/milestones${buildQuery(q)}`),
+
+  create: (data: unknown) =>
+    fetchWithAuth(`/milestones`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  update: (id: string, data: unknown) =>
+    fetchWithAuth(`/milestones/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+
+  updateStatus: (id: string, data: unknown) =>
+    fetchWithAuth(`/milestones/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+
+  delete: (id: string) =>
+    fetchWithAuth(`/milestones/${id}`, { method: "DELETE" }),
 };
 
 /* ─────────────────────────────────────────────
    NOTIFICATIONS API
+   Aligned with backend ✓
 ───────────────────────────────────────────── */
 
 export const notificationsAPI = {
@@ -207,13 +271,12 @@ export const notificationsAPI = {
     fetchWithAuth(`/notifications${buildQuery(q)}`),
 
   markAllRead: () =>
-    fetchWithAuth(`/notifications/mark-all-read`, {
-      method: "POST",
-    }),
+    fetchWithAuth(`/notifications/mark-all-read`, { method: "POST" }),
 };
 
 /* ─────────────────────────────────────────────
    DASHBOARD API
+   Aligned with backend ✓
 ───────────────────────────────────────────── */
 
 export const dashboardAPI = {
@@ -222,22 +285,8 @@ export const dashboardAPI = {
 };
 
 /* ─────────────────────────────────────────────
-   MILESTONES API
-───────────────────────────────────────────── */
-
-export const milestoneAPI = {
-  getAll: (q?: Record<string, unknown>) =>
-    fetchWithAuth(`/milestones${buildQuery(q)}`),
-
-  update: (id: string, data: unknown) =>
-    fetchWithAuth(`/milestones/${id}`, {
-      method: "PUT",
-      body: JSON.stringify(data),
-    }),
-};
-
-/* ─────────────────────────────────────────────
    AUTH API
+   Aligned with backend ✓
 ───────────────────────────────────────────── */
 
 export const authAPI = {
