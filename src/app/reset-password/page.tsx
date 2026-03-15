@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
@@ -10,13 +10,13 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "@/lib/store/authStore";
 
-/* ─── Password strength helper ─────────────────────────── */
+/* ─── Password strength helper ──────────────────────────────────────────────── */
 function getStrength(pw: string): { score: number; label: string; color: string } {
   let score = 0;
-  if (pw.length >= 8)  score++;
-  if (pw.length >= 12) score++;
-  if (/[A-Z]/.test(pw)) score++;
-  if (/[0-9]/.test(pw)) score++;
+  if (pw.length >= 8)          score++;
+  if (pw.length >= 12)         score++;
+  if (/[A-Z]/.test(pw))        score++;
+  if (/[0-9]/.test(pw))        score++;
   if (/[^A-Za-z0-9]/.test(pw)) score++;
 
   if (score <= 1) return { score, label: "Weak",   color: "#ef4444" };
@@ -25,7 +25,44 @@ function getStrength(pw: string): { score: number; label: string; color: string 
   return              { score, label: "Strong", color: "#10b981" };
 }
 
-/* ─── Inner form (needs Suspense for useSearchParams) ───── */
+/* ─── PasswordInput — lifted OUTSIDE ResetPasswordForm ──────────────────────
+   Defining input wrappers inside a parent component creates a new component
+   type every render → React unmounts + remounts the input → focus lost.
+   This stable external component keeps the input mounted continuously.
+────────────────────────────────────────────────────────────────────────────── */
+interface PasswordInputProps {
+  value: string;
+  onChange: (val: string) => void;
+  placeholder?: string;
+  borderStyle?: React.CSSProperties;
+}
+
+function PasswordInput({ value, onChange, placeholder, borderStyle }: PasswordInputProps) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="relative">
+      <input
+        type={show ? "text" : "password"}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="input pr-11 w-full"
+        style={borderStyle}
+        required
+      />
+      <button
+        type="button"
+        onClick={() => setShow((s) => !s)}
+        className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
+        style={{ color: "var(--text-3)" }}
+      >
+        {show ? <EyeOff size={16} /> : <Eye size={16} />}
+      </button>
+    </div>
+  );
+}
+
+/* ─── Inner form (needs Suspense for useSearchParams) ────────────────────── */
 function ResetPasswordForm() {
   const router       = useRouter();
   const searchParams = useSearchParams();
@@ -33,16 +70,25 @@ function ResetPasswordForm() {
 
   const { resetPassword, isLoading } = useAuthStore();
 
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirm,  setShowConfirm]  = useState(false);
-  const [password,     setPassword]     = useState("");
-  const [confirm,      setConfirm]      = useState("");
-  const [done,         setDone]         = useState(false);
-  const [error,        setError]        = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm,  setConfirm]  = useState("");
+  const [done,     setDone]     = useState(false);
+  const [error,    setError]    = useState("");
 
-  const strength        = getStrength(password);
-  const passwordsMatch  = password === confirm;
-  const canSubmit       = !isLoading && password.length >= 8 && passwordsMatch && !!token;
+  // Stable handlers — useCallback so identity stays the same across renders
+  const handlePasswordChange = useCallback((val: string) => {
+    setPassword(val);
+    setError("");
+  }, []);
+
+  const handleConfirmChange = useCallback((val: string) => {
+    setConfirm(val);
+    setError("");
+  }, []);
+
+  const strength       = getStrength(password);
+  const passwordsMatch = password === confirm;
+  const canSubmit      = !isLoading && password.length >= 8 && passwordsMatch && !!token;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,12 +116,11 @@ function ResetPasswordForm() {
     }
   };
 
-  /* ── Invalid / missing token state ── */
+  /* ── Invalid / missing token ── */
   if (!token) {
     return (
       <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
         className="glass-card p-8"
       >
         <div className="text-center">
@@ -92,14 +137,10 @@ function ResetPasswordForm() {
             This reset link is missing a token or has expired.
             Please request a new password reset link.
           </p>
-          <Link
-            href="/auth/forgot-password"
-            className="btn btn-primary btn-full"
-          >
+          <Link href="/auth/forgot-password" className="btn btn-primary btn-full">
             Request new link
           </Link>
         </div>
-
         <div className="mt-8 pt-6 border-t text-center" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
           <Link
             href="/auth/login"
@@ -120,8 +161,7 @@ function ResetPasswordForm() {
       {done && (
         <motion.div
           key="success"
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
+          initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
           className="glass-card p-8 text-center"
         >
           <div
@@ -130,10 +170,7 @@ function ResetPasswordForm() {
           >
             <CheckCircle2 size={28} style={{ color: "#10b981" }} />
           </div>
-          <h2
-            className="text-2xl font-bold mb-2"
-            style={{ fontFamily: "var(--font-display)", color: "var(--text-1)" }}
-          >
+          <h2 className="text-2xl font-bold mb-2" style={{ fontFamily: "var(--font-display)", color: "var(--text-1)" }}>
             Password reset!
           </h2>
           <p className="text-sm mb-5" style={{ color: "var(--text-2)" }}>
@@ -142,12 +179,7 @@ function ResetPasswordForm() {
           <p className="text-xs" style={{ color: "var(--text-3)" }}>
             Redirecting you to login in a moment…
           </p>
-
-          {/* Animated progress bar */}
-          <div
-            className="mt-6 h-1 rounded-full overflow-hidden"
-            style={{ background: "rgba(255,255,255,0.08)" }}
-          >
+          <div className="mt-6 h-1 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
             <motion.div
               className="h-full rounded-full"
               style={{ background: "linear-gradient(90deg, #10b981, #34d399)" }}
@@ -163,12 +195,9 @@ function ResetPasswordForm() {
       {!done && (
         <motion.div
           key="form"
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -12 }}
+          initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
           className="glass-card p-8"
         >
-          {/* Header */}
           <div className="text-center mb-8">
             <div
               className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4"
@@ -176,10 +205,7 @@ function ResetPasswordForm() {
             >
               <Lock size={28} style={{ color: "var(--brand)" }} />
             </div>
-            <h1
-              className="text-2xl font-bold mb-2"
-              style={{ fontFamily: "var(--font-display)", color: "var(--text-1)" }}
-            >
+            <h1 className="text-2xl font-bold mb-2" style={{ fontFamily: "var(--font-display)", color: "var(--text-1)" }}>
               Set new password
             </h1>
             <p className="text-sm" style={{ color: "var(--text-2)" }}>
@@ -194,31 +220,14 @@ function ResetPasswordForm() {
               <label className="text-sm font-medium block" style={{ color: "var(--text-2)" }}>
                 New Password
               </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => { setPassword(e.target.value); setError(""); }}
-                  placeholder="Min 8 characters"
-                  minLength={8}
-                  className="input pr-11"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
-                  style={{ color: "var(--text-3)" }}
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-
-              {/* Strength meter */}
+              <PasswordInput
+                value={password}
+                onChange={handlePasswordChange}
+                placeholder="Min 8 characters"
+              />
               {password && (
                 <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
+                  initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
                   className="pt-2 space-y-1.5"
                 >
                   <div className="flex gap-1">
@@ -226,11 +235,7 @@ function ResetPasswordForm() {
                       <div
                         key={i}
                         className="h-1 flex-1 rounded-full transition-all duration-300"
-                        style={{
-                          background: i <= strength.score
-                            ? strength.color
-                            : "rgba(255,255,255,0.08)",
-                        }}
+                        style={{ background: i <= strength.score ? strength.color : "rgba(255,255,255,0.08)" }}
                       />
                     ))}
                   </div>
@@ -246,35 +251,20 @@ function ResetPasswordForm() {
               <label className="text-sm font-medium block" style={{ color: "var(--text-2)" }}>
                 Confirm Password
               </label>
-              <div className="relative">
-                <input
-                  type={showConfirm ? "text" : "password"}
-                  value={confirm}
-                  onChange={(e) => { setConfirm(e.target.value); setError(""); }}
-                  placeholder="Repeat your password"
-                  className="input pr-11"
-                  style={
-                    confirm && !passwordsMatch
-                      ? { borderColor: "rgba(239,68,68,0.5)" }
-                      : confirm && passwordsMatch
-                      ? { borderColor: "rgba(16,185,129,0.5)" }
-                      : {}
-                  }
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirm(!showConfirm)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
-                  style={{ color: "var(--text-3)" }}
-                >
-                  {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
+              <PasswordInput
+                value={confirm}
+                onChange={handleConfirmChange}
+                placeholder="Repeat your password"
+                borderStyle={
+                  confirm && !passwordsMatch
+                    ? { borderColor: "rgba(239,68,68,0.5)" }
+                    : confirm && passwordsMatch
+                    ? { borderColor: "rgba(16,185,129,0.5)" }
+                    : undefined
+                }
+              />
               {confirm && !passwordsMatch && (
-                <p className="text-xs" style={{ color: "#ef4444" }}>
-                  Passwords do not match
-                </p>
+                <p className="text-xs" style={{ color: "#ef4444" }}>Passwords do not match</p>
               )}
               {confirm && passwordsMatch && password.length >= 8 && (
                 <p className="text-xs flex items-center gap-1" style={{ color: "#10b981" }}>
@@ -286,8 +276,7 @@ function ResetPasswordForm() {
             {/* Global error */}
             {error && (
               <motion.div
-                initial={{ opacity: 0, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
+                initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
                 className="flex items-start gap-2.5 p-3 rounded-xl text-sm"
                 style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", color: "#f87171" }}
               >
@@ -324,11 +313,7 @@ function ResetPasswordForm() {
             </motion.button>
           </form>
 
-          {/* Footer */}
-          <div
-            className="mt-8 pt-6 text-center"
-            style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}
-          >
+          <div className="mt-8 pt-6 text-center" style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
             <Link
               href="/auth/login"
               className="inline-flex items-center gap-2 text-sm transition-colors"
@@ -345,7 +330,7 @@ function ResetPasswordForm() {
   );
 }
 
-/* ─── Page wrapper ──────────────────────────────────────── */
+/* ─── Page wrapper ───────────────────────────────────────────────────────────── */
 export default function ResetPasswordPage() {
   return (
     <div
@@ -359,31 +344,21 @@ export default function ResetPasswordPage() {
       }}
     >
       <div className="w-full max-w-[430px]">
-
-        {/* Logo */}
         <motion.div
-          initial={{ opacity: 0, y: -12 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }}
           className="flex items-center justify-center gap-3 mb-10"
         >
           <div
             className="w-10 h-10 rounded-xl flex items-center justify-center"
-            style={{
-              background: "linear-gradient(135deg, var(--brand), #818cf8)",
-              boxShadow: "0 4px 20px var(--brand-glow)",
-            }}
+            style={{ background: "linear-gradient(135deg, var(--brand), #818cf8)", boxShadow: "0 4px 20px var(--brand-glow)" }}
           >
             <Crown size={17} color="#fff" />
           </div>
-          <span
-            className="text-lg font-bold"
-            style={{ fontFamily: "var(--font-display)", color: "var(--text-1)" }}
-          >
+          <span className="text-lg font-bold" style={{ fontFamily: "var(--font-display)", color: "var(--text-1)" }}>
             King Praise Techz
           </span>
         </motion.div>
 
-        {/* Form (wrapped in Suspense for useSearchParams) */}
         <Suspense
           fallback={
             <div className="glass-card p-8 text-center" style={{ color: "var(--text-2)" }}>

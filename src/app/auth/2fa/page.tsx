@@ -8,17 +8,51 @@ import { API_BASE_URL } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 
+// ─── OTPInputs lifted OUTSIDE TwoFactorContent ───────────────────────────────
+// Defining it inside causes a new component type every render → inputs remount
+// → focus is lost after every keypress. Stable reference = focus stays.
+interface OTPInputsProps {
+  code: string[];
+  inputRefs: React.MutableRefObject<Array<HTMLInputElement | null>>;
+  onChange: (index: number, value: string) => void;
+  onKeyDown: (index: number, e: React.KeyboardEvent<HTMLInputElement>) => void;
+}
+
+function OTPInputs({ code, inputRefs, onChange, onKeyDown }: OTPInputsProps) {
+  return (
+    <div className="flex justify-center gap-3 mb-6">
+      {code.map((digit, idx) => (
+        <input
+          key={idx}
+          ref={(el) => { inputRefs.current[idx] = el; }}
+          type="text"
+          inputMode="numeric"
+          maxLength={1}
+          value={digit}
+          onChange={(e) => onChange(idx, e.target.value)}
+          onKeyDown={(e) => onKeyDown(idx, e)}
+          className={cn(
+            "w-11 h-14 text-center text-xl font-bold rounded-xl border transition-all input-dark",
+            digit ? "border-brand-500/50 text-brand-300" : "border-white/10"
+          )}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ─── Inner content ────────────────────────────────────────────────────────────
 function TwoFactorContent() {
-  const router = useRouter();
+  const router       = useRouter();
   const searchParams = useSearchParams();
-  const isSetup = searchParams?.get("setup") === "true";
+  const isSetup      = searchParams?.get("setup") === "true";
 
-  const { verify2FA, enable2FA, isLoading, setupToken, user } = useAuthStore();
+  const { verify2FA, enable2FA, isLoading, setupToken } = useAuthStore();
 
-  const [code, setCode] = useState<string[]>(["", "", "", "", "", ""]);
-  const [qrCode, setQrCode] = useState("");
+  const [code, setCode]         = useState<string[]>(["", "", "", "", "", ""]);
+  const [qrCode, setQrCode]     = useState("");
   const [manualKey, setManualKey] = useState("");
-  const [step, setStep] = useState<"qr" | "verify">(isSetup ? "qr" : "verify");
+  const [step, setStep]         = useState<"qr" | "verify">(isSetup ? "qr" : "verify");
   const [loadingQR, setLoadingQR] = useState(false);
 
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
@@ -27,9 +61,9 @@ function TwoFactorContent() {
     if (isSetup && setupToken) {
       setLoadingQR(true);
       fetch(`${API_BASE_URL}/auth/2fa/setup`, {
-        method: "POST",
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ setupToken }),
+        body:    JSON.stringify({ setupToken }),
       })
         .then((r) => r.json())
         .then((res) => {
@@ -49,6 +83,7 @@ function TwoFactorContent() {
     }
   }, [isSetup, setupToken, router]);
 
+  // Stable handler — same reference across renders
   const handleInput = (index: number, value: string) => {
     const newCode = [...code];
     if (value.length > 1) {
@@ -64,6 +99,7 @@ function TwoFactorContent() {
     if (value && index < 5) inputRefs.current[index + 1]?.focus();
   };
 
+  // Stable handler — same reference across renders
   const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Backspace" && !code[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
@@ -73,7 +109,6 @@ function TwoFactorContent() {
   const handleVerify = async () => {
     const fullCode = code.join("");
     if (fullCode.length !== 6) return;
-
     try {
       if (isSetup && setupToken) {
         await enable2FA?.(setupToken, fullCode);
@@ -97,29 +132,11 @@ function TwoFactorContent() {
     }
   };
 
-  const OTPInputs = () => (
-    <div className="flex justify-center gap-3 mb-6">
-      {code.map((digit, idx) => (
-        <input
-          key={idx}
-          ref={(el) => { inputRefs.current[idx] = el; }}
-          type="text"
-          inputMode="numeric"
-          maxLength={1}
-          value={digit}
-          onChange={(e) => handleInput(idx, e.target.value)}
-          onKeyDown={(e) => handleKeyDown(idx, e)}
-          className={cn(
-            "w-11 h-14 text-center text-xl font-bold rounded-xl border transition-all input-dark",
-            digit ? "border-brand-500/50 text-brand-300" : "border-white/10"
-          )}
-        />
-      ))}
-    </div>
-  );
-
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md relative z-10">
+    <motion.div
+      initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+      className="w-full max-w-md relative z-10"
+    >
       <div className="flex items-center justify-center gap-3 mb-10">
         <div className="w-10 h-10 rounded-xl btn-glow flex items-center justify-center">
           <Crown size={20} className="text-white" />
@@ -134,8 +151,12 @@ function TwoFactorContent() {
               <div className="w-12 h-12 rounded-xl bg-brand-500/15 flex items-center justify-center mx-auto mb-3">
                 <Shield size={22} className="text-brand-400" />
               </div>
-              <h2 className="font-display font-bold text-xl text-white mb-2">Set up 2-Factor Authentication</h2>
-              <p className="text-slate-400 text-sm">Scan the QR code below with Google Authenticator or Authy</p>
+              <h2 className="font-display font-bold text-xl text-white mb-2">
+                Set up 2-Factor Authentication
+              </h2>
+              <p className="text-slate-400 text-sm">
+                Scan the QR code below with Google Authenticator or Authy
+              </p>
             </div>
 
             {loadingQR ? (
@@ -184,7 +205,13 @@ function TwoFactorContent() {
               </p>
             </div>
 
-            <OTPInputs />
+            {/* OTPInputs is now a stable external component — no remounting on state change */}
+            <OTPInputs
+              code={code}
+              inputRefs={inputRefs}
+              onChange={handleInput}
+              onKeyDown={handleKeyDown}
+            />
 
             <button
               onClick={handleVerify}
@@ -202,7 +229,10 @@ function TwoFactorContent() {
             </button>
 
             {isSetup && (
-              <button onClick={() => setStep("qr")} className="w-full mt-3 text-sm text-slate-400 hover:text-white transition-colors">
+              <button
+                onClick={() => setStep("qr")}
+                className="w-full mt-3 text-sm text-slate-400 hover:text-white transition-colors"
+              >
                 ← Back to QR code
               </button>
             )}
@@ -217,8 +247,10 @@ export default function TwoFactorPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full" style={{ background: "radial-gradient(circle, rgba(26,77,255,0.08) 0%, transparent 70%)" }} />
-        <div className="absolute bottom-1/4 right-1/4 w-64 h-64 rounded-full" style={{ background: "radial-gradient(circle, rgba(16,185,129,0.06) 0%, transparent 70%)" }} />
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full"
+          style={{ background: "radial-gradient(circle, rgba(26,77,255,0.08) 0%, transparent 70%)" }} />
+        <div className="absolute bottom-1/4 right-1/4 w-64 h-64 rounded-full"
+          style={{ background: "radial-gradient(circle, rgba(16,185,129,0.06) 0%, transparent 70%)" }} />
       </div>
       <Suspense fallback={<div className="text-slate-400">Loading...</div>}>
         <TwoFactorContent />
