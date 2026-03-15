@@ -1,45 +1,62 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FolderKanban, Plus, Search, Calendar, DollarSign,
   Users, TrendingUp, Eye, Trash2, Filter, UserSearch,
-  CheckCircle2, Loader2, AlertCircle,
+  CheckCircle2, Loader2, AlertCircle, X, Briefcase,
 } from "lucide-react";
 import {
-  Badge, Card, SectionHeader, Button, Modal,
+  Badge, Card, Button, Modal,
   Input, Textarea, Select, EmptyState, Skeleton, StatsCard,
 } from "@/components/ui";
-import { projectsAPI, clientsAPI } from "@/lib/api";
+import { projectsAPI, clientsAPI, teamAPI } from "@/lib/api";
 import { Project } from "@/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import toast from "react-hot-toast";
 import Link from "next/link";
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
 const STATUS_OPTIONS = [
-  { value: "", label: "All Statuses" },
-  { value: "planning", label: "Planning" },
-  { value: "in-progress", label: "In Progress" },
-  { value: "review", label: "Review" },
-  { value: "completed", label: "Completed" },
-  { value: "on-hold", label: "On Hold" },
+  { value: "",            label: "All Statuses"  },
+  { value: "planning",    label: "Planning"      },
+  { value: "in-progress", label: "In Progress"   },
+  { value: "review",      label: "Review"        },
+  { value: "completed",   label: "Completed"     },
+  { value: "on-hold",     label: "On Hold"       },
+];
+
+const PRIORITY_OPTIONS = [
+  { value: "low",    label: "Low"    },
+  { value: "medium", label: "Medium" },
+  { value: "high",   label: "High"   },
+  { value: "urgent", label: "Urgent" },
 ];
 
 const defaultForm = {
-  title: "",
-  description: "",
-  budget: "",
+  title:        "",
+  description:  "",
+  budget:       "",
   deliveryDate: "",
-  clientId: "",       // resolved from lookup
-  clientEmail: "",    // display only after lookup
-  clientName: "",     // display only after lookup
-  status: "planning",
-  category: "",
+  clientId:     "",
+  status:       "planning",
+  category:     "",
 };
 
-// ─── ClientLookup component (outside parent to avoid remount on re-render) ───
+const defaultTask = {
+  title:       "",
+  description: "",
+  priority:    "medium",
+  dueDate:     "",
+  payAmount:   "",
+  assignedTo:  "" as string,
+  memberName:  "" as string,
+};
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 interface Client {
   id: string;
   firstName: string;
@@ -48,131 +65,81 @@ interface Client {
   company?: string;
 }
 
-interface ClientLookupProps {
-  selectedClient: Client | null;
-  onSelect: (client: Client | null) => void;
-  error?: string;
+interface TeamMember {
+  id: string;
+  _id?: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  jobTitle?: string;
+  skills?: string[];
 }
 
-function ClientLookup({ selectedClient, onSelect, error }: ClientLookupProps) {
-  const [query, setQuery]         = useState("");
-  const [results, setResults]     = useState<Client[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [open, setOpen]           = useState(false);
-  const [searchErr, setSearchErr] = useState("");
-  const debounceRef               = useRef<number | undefined>(undefined);
-  const wrapperRef                = useRef<HTMLDivElement>(null);
+interface TaskDraft {
+  id: string;
+  title: string;
+  description: string;
+  priority: string;
+  dueDate: string;
+  payAmount: string;
+  assignedTo: string;
+  memberName: string;
+}
 
-  // Close dropdown on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
+// ─── SearchDropdown — generic reusable dropdown (outside all page components) ─
 
-  const search = (q: string) => {
-    setQuery(q);
-    setSearchErr("");
-    if (selectedClient) onSelect(null); // clear selection when typing again
+interface SearchDropdownProps<T> {
+  label: string;
+  required?: boolean;
+  placeholder: string;
+  value: string;
+  onChange: (val: string) => void;
+  results: T[];
+  searching: boolean;
+  open: boolean;
+  searchErr: string;
+  selected: boolean;
+  onClear: () => void;
+  renderResult: (item: T) => React.ReactNode;
+  renderSelected?: () => React.ReactNode;
+  error?: string;
+  wrapperRef: React.MutableRefObject<HTMLDivElement | null>;
+}
 
-    window.clearTimeout(debounceRef.current);
-    if (!q.trim()) { setResults([]); setOpen(false); return; }
-
-    debounceRef.current = window.setTimeout(async () => {
-      setSearching(true);
-      setOpen(true);
-      try {
-        // Calls GET /api/clients?search=q — adjust to your actual API shape
-        const res = await clientsAPI.search(q);
-        const list: Client[] = res.data?.clients ?? res.data ?? [];
-        setResults(list);
-        if (list.length === 0) setSearchErr("No clients found with that name or email.");
-      } catch {
-        setSearchErr("Failed to search clients. Check your connection.");
-        setResults([]);
-      } finally {
-        setSearching(false);
-      }
-    }, 350);
-  };
-
-  const pick = (client: Client) => {
-    onSelect(client);
-    setQuery(`${client.firstName} ${client.lastName} — ${client.email}`);
-    setOpen(false);
-    setResults([]);
-  };
-
-  const clear = () => {
-    onSelect(null);
-    setQuery("");
-    setResults([]);
-    setOpen(false);
-    setSearchErr("");
-  };
-
+function SearchDropdown<T>({
+  label, required, placeholder, value, onChange,
+  results, searching, open, searchErr, selected,
+  onClear, renderResult, renderSelected, error, wrapperRef,
+}: SearchDropdownProps<T>) {
   return (
     <div ref={wrapperRef} className="relative">
       <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-2)" }}>
-        Client <span style={{ color: "var(--rose)" }}>*</span>
+        {label} {required && <span style={{ color: "var(--rose)" }}>*</span>}
       </label>
-
-      {/* Input */}
       <div className="relative">
         <UserSearch size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
         <input
           className={`input-dark w-full pl-9 pr-9 py-2.5 rounded-xl text-sm ${
-            error ? "border-red-500/60" : selectedClient ? "border-emerald-500/40" : ""
+            error ? "border-red-500/60" : selected ? "border-emerald-500/40" : ""
           }`}
-          placeholder="Search by name or email…"
-          value={query}
-          onChange={e => search(e.target.value)}
+          placeholder={placeholder}
+          value={value}
+          onChange={e => onChange(e.target.value)}
           autoComplete="off"
         />
         <div className="absolute right-3 top-1/2 -translate-y-1/2">
           {searching && <Loader2 size={14} className="animate-spin text-slate-400" />}
-          {!searching && selectedClient && <CheckCircle2 size={14} className="text-emerald-400" />}
-          {!searching && !selectedClient && query && (
-            <button type="button" onClick={clear} className="text-slate-500 hover:text-slate-300 text-xs">✕</button>
+          {!searching && selected && <CheckCircle2 size={14} className="text-emerald-400" />}
+          {!searching && !selected && value && (
+            <button type="button" onClick={onClear} className="text-slate-500 hover:text-slate-300 text-xs">✕</button>
           )}
         </div>
       </div>
 
-      {/* Selected client card */}
-      {selectedClient && (
-        <motion.div
-          initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
-          className="mt-2 p-3 rounded-xl flex items-center gap-3"
-          style={{ background: "rgba(52,211,153,0.07)", border: "1px solid rgba(52,211,153,0.2)" }}
-        >
-          <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center shrink-0">
-            <Users size={14} className="text-emerald-400" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white">
-              {selectedClient.firstName} {selectedClient.lastName}
-            </p>
-            <p className="text-xs text-slate-400 truncate">{selectedClient.email}</p>
-            {selectedClient.company && (
-              <p className="text-xs text-slate-500">{selectedClient.company}</p>
-            )}
-          </div>
-          <button
-            type="button" onClick={clear}
-            className="text-xs text-slate-500 hover:text-slate-300 transition-colors px-2 py-1 rounded"
-          >
-            Change
-          </button>
-        </motion.div>
-      )}
+      {selected && renderSelected && renderSelected()}
 
-      {/* Dropdown results */}
       <AnimatePresence>
-        {open && !selectedClient && (
+        {open && !selected && (
           <motion.div
             initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.15 }}
@@ -189,31 +156,13 @@ function ClientLookup({ selectedClient, onSelect, error }: ClientLookupProps) {
                 <AlertCircle size={13} className="text-amber-400 shrink-0" /> {searchErr}
               </div>
             )}
-            {!searching && results.length > 0 && results.map(client => (
-              <button
-                key={client.id} type="button"
-                onClick={() => pick(client)}
-                className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/5 transition-colors"
-              >
-                <div className="w-7 h-7 rounded-lg bg-brand-500/20 flex items-center justify-center shrink-0">
-                  <Users size={12} className="text-brand-400" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-white font-medium">
-                    {client.firstName} {client.lastName}
-                  </p>
-                  <p className="text-xs text-slate-400 truncate">{client.email}</p>
-                </div>
-                {client.company && (
-                  <span className="text-xs text-slate-500 shrink-0">{client.company}</span>
-                )}
-              </button>
+            {!searching && results.length > 0 && results.map((item, i) => (
+              <div key={i}>{renderResult(item)}</div>
             ))}
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Validation error */}
       {error && (
         <p className="text-xs mt-1.5 flex items-center gap-1" style={{ color: "var(--rose)" }}>
           <AlertCircle size={11} /> {error}
@@ -223,50 +172,325 @@ function ClientLookup({ selectedClient, onSelect, error }: ClientLookupProps) {
   );
 }
 
-// ─── Main page ───────────────────────────────────────────────────────────────
-export default function AdminProjectsPage() {
-  const router = useRouter();
+// ─── ClientLookup ─────────────────────────────────────────────────────────────
 
-  const [projects, setProjects]         = useState<Project[]>([]);
-  const [loading, setLoading]           = useState(true);
-  const [search, setSearch]             = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [submitting, setSubmitting]     = useState(false);
-  const [deleting, setDeleting]         = useState<string | null>(null);
-  const [form, setForm]                 = useState(defaultForm);
-  const [errors, setErrors]             = useState<Record<string, string>>({});
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+interface ClientLookupProps {
+  selectedClient: Client | null;
+  onSelect: (client: Client | null) => void;
+  error?: string;
+}
 
-  const fetchProjects = async () => {
-    setLoading(true);
-    try {
-      const res = await projectsAPI.getAll(
-        statusFilter ? { status: statusFilter } : undefined
-      );
-      setProjects(res.data?.projects || res.data || []);
-    } catch {
-      toast.error("Failed to load projects");
-    } finally {
-      setLoading(false);
-    }
+function ClientLookup({ selectedClient, onSelect, error }: ClientLookupProps) {
+  const [query, setQuery]         = useState("");
+  const [results, setResults]     = useState<Client[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [open, setOpen]           = useState(false);
+  const [searchErr, setSearchErr] = useState("");
+  const debounceRef               = useRef<number | undefined>(undefined);
+  const wrapperRef                = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const search = (q: string) => {
+    setQuery(q);
+    setSearchErr("");
+    if (selectedClient) onSelect(null);
+    window.clearTimeout(debounceRef.current);
+    if (!q.trim()) { setResults([]); setOpen(false); return; }
+    debounceRef.current = window.setTimeout(async () => {
+      setSearching(true); setOpen(true);
+      try {
+        const res  = await clientsAPI.search(q);
+        const list = res.data?.clients ?? res.data ?? [];
+        setResults(list);
+        if (!list.length) setSearchErr("No clients found.");
+      } catch { setSearchErr("Failed to search clients."); setResults([]); }
+      finally { setSearching(false); }
+    }, 350);
   };
 
-  useEffect(() => { fetchProjects(); }, [statusFilter]);
+  const pick  = (c: Client) => { onSelect(c); setQuery(`${c.firstName} ${c.lastName} — ${c.email}`); setOpen(false); setResults([]); };
+  const clear = ()           => { onSelect(null); setQuery(""); setResults([]); setOpen(false); setSearchErr(""); };
+
+  return (
+    <SearchDropdown<Client>
+      label="Client" required
+      placeholder="Search by name or email…"
+      value={query} onChange={search}
+      results={results} searching={searching} open={open} searchErr={searchErr}
+      selected={!!selectedClient} onClear={clear}
+      error={error} wrapperRef={wrapperRef}
+      renderSelected={() => (
+        <motion.div
+          initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+          className="mt-2 p-3 rounded-xl flex items-center gap-3"
+          style={{ background: "rgba(52,211,153,0.07)", border: "1px solid rgba(52,211,153,0.2)" }}
+        >
+          <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center shrink-0">
+            <Users size={14} className="text-emerald-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-white">{selectedClient!.firstName} {selectedClient!.lastName}</p>
+            <p className="text-xs text-slate-400 truncate">{selectedClient!.email}</p>
+            {selectedClient!.company && <p className="text-xs text-slate-500">{selectedClient!.company}</p>}
+          </div>
+          <button type="button" onClick={clear} className="text-xs text-slate-500 hover:text-slate-300 px-2 py-1 rounded">Change</button>
+        </motion.div>
+      )}
+      renderResult={(c) => (
+        <button type="button" onClick={() => pick(c)}
+          className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/5 transition-colors"
+        >
+          <div className="w-7 h-7 rounded-lg bg-brand-500/20 flex items-center justify-center shrink-0">
+            <Users size={12} className="text-brand-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-white font-medium">{c.firstName} {c.lastName}</p>
+            <p className="text-xs text-slate-400 truncate">{c.email}</p>
+          </div>
+          {c.company && <span className="text-xs text-slate-500 shrink-0">{c.company}</span>}
+        </button>
+      )}
+    />
+  );
+}
+
+// ─── TeamMemberLookup ─────────────────────────────────────────────────────────
+
+interface TeamMemberLookupProps {
+  onSelect: (member: TeamMember) => void;
+}
+
+function TeamMemberLookup({ onSelect }: TeamMemberLookupProps) {
+  const [query, setQuery]         = useState("");
+  const [results, setResults]     = useState<TeamMember[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [open, setOpen]           = useState(false);
+  const [searchErr, setSearchErr] = useState("");
+  const debounceRef               = useRef<number | undefined>(undefined);
+  const wrapperRef                = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const search = (q: string) => {
+    setQuery(q);
+    setSearchErr("");
+    window.clearTimeout(debounceRef.current);
+    if (!q.trim()) { setResults([]); setOpen(false); return; }
+    debounceRef.current = window.setTimeout(async () => {
+      setSearching(true); setOpen(true);
+      try {
+        const res  = await teamAPI.getAll({ search: q });
+        const list = res.data?.members ?? res.data ?? [];
+        setResults(list);
+        if (!list.length) setSearchErr("No team members found.");
+      } catch { setSearchErr("Failed to search team members."); setResults([]); }
+      finally { setSearching(false); }
+    }, 350);
+  };
+
+  const pick  = (m: TeamMember) => { onSelect(m); setQuery(""); setResults([]); setOpen(false); };
+  const clear = ()               => { setQuery(""); setResults([]); setOpen(false); setSearchErr(""); };
+
+  return (
+    <SearchDropdown<TeamMember>
+      label="Assign to team member" required
+      placeholder="Search team members…"
+      value={query} onChange={search}
+      results={results} searching={searching} open={open} searchErr={searchErr}
+      selected={false} onClear={clear}
+      wrapperRef={wrapperRef}
+      renderResult={(m) => (
+        <button type="button" onClick={() => pick(m)}
+          className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/5 transition-colors"
+        >
+          <div className="w-7 h-7 rounded-lg bg-emerald-500/20 flex items-center justify-center shrink-0">
+            <Briefcase size={12} className="text-emerald-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-white font-medium">{m.firstName} {m.lastName}</p>
+            <p className="text-xs text-slate-400 truncate">{m.jobTitle || m.email}</p>
+          </div>
+          {m.skills && m.skills.length > 0 && (
+            <span className="text-xs text-slate-500 shrink-0">{m.skills[0]}</span>
+          )}
+        </button>
+      )}
+    />
+  );
+}
+
+// ─── TaskForm — outside AdminProjectsPage to prevent remount on state change ──
+
+interface TaskFormProps {
+  task: typeof defaultTask;
+  onChange: (field: string, value: string) => void;
+  onMemberSelect: (member: TeamMember) => void;
+  onClearMember: () => void;
+}
+
+function TaskForm({ task, onChange, onMemberSelect, onClearMember }: TaskFormProps) {
+  return (
+    <div className="space-y-3 p-4 rounded-xl" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+      <TeamMemberLookup onSelect={onMemberSelect} />
+
+      {task.memberName && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
+          style={{ background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.18)" }}
+        >
+          <Briefcase size={13} className="text-emerald-400 shrink-0" />
+          <span className="text-xs text-emerald-300 flex-1">{task.memberName}</span>
+          <button type="button" onClick={onClearMember} className="text-slate-500 hover:text-red-400 transition-colors">
+            <X size={13} />
+          </button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-2)" }}>Task title *</label>
+          <input
+            className="input-dark w-full px-3 py-2 rounded-xl text-sm"
+            placeholder="e.g. Design homepage"
+            value={task.title}
+            onChange={e => onChange("title", e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-2)" }}>Priority</label>
+          <select
+            className="input-dark w-full px-3 py-2 rounded-xl text-sm cursor-pointer"
+            value={task.priority}
+            onChange={e => onChange("priority", e.target.value)}
+            style={{ background: "rgba(255,255,255,0.05)" }}
+          >
+            {PRIORITY_OPTIONS.map(o => (
+              <option key={o.value} value={o.value} style={{ background: "#1a1a2e" }}>{o.label}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-2)" }}>Description</label>
+        <textarea
+          className="input-dark w-full px-3 py-2 rounded-xl text-sm resize-none"
+          placeholder="What needs to be done…"
+          rows={2}
+          value={task.description}
+          onChange={e => onChange("description", e.target.value)}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-2)" }}>Due date *</label>
+          <input
+            type="date"
+            className="input-dark w-full px-3 py-2 rounded-xl text-sm"
+            value={task.dueDate}
+            onChange={e => onChange("dueDate", e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-2)" }}>Pay amount (NGN)</label>
+          <input
+            type="number"
+            className="input-dark w-full px-3 py-2 rounded-xl text-sm"
+            placeholder="0"
+            value={task.payAmount}
+            onChange={e => onChange("payAmount", e.target.value)}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+
+export default function AdminProjectsPage() {
+
+  const [projects, setProjects]               = useState<Project[]>([]);
+  const [loading, setLoading]                 = useState(true);
+  const [search, setSearch]                   = useState("");
+  const [statusFilter, setStatusFilter]       = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [submitting, setSubmitting]           = useState(false);
+  const [deleting, setDeleting]               = useState<string | null>(null);
+  const [form, setForm]                       = useState(defaultForm);
+  const [errors, setErrors]                   = useState<Record<string, string>>({});
+  const [selectedClient, setSelectedClient]   = useState<Client | null>(null);
+
+  // Task draft state
+  const [tasks, setTasks]             = useState<TaskDraft[]>([]);
+  const [currentTask, setCurrentTask] = useState({ ...defaultTask });
+  const [showTaskForm, setShowTaskForm] = useState(false);
+  const [taskError, setTaskError]       = useState("");
+
+  useEffect(() => {
+    setLoading(true);
+    projectsAPI.getAll(statusFilter ? { status: statusFilter } : undefined)
+      .then(res => setProjects(res.data?.projects || res.data || []))
+      .catch(() => toast.error("Failed to load projects"))
+      .finally(() => setLoading(false));
+  }, [statusFilter]);
 
   const closeModal = () => {
     setShowCreateModal(false);
     setForm(defaultForm);
     setErrors({});
     setSelectedClient(null);
+    setTasks([]);
+    setCurrentTask({ ...defaultTask });
+    setShowTaskForm(false);
+    setTaskError("");
   };
+
+  // Stable handlers — defined in page, passed as props to TaskForm
+  const handleTaskFieldChange  = (field: string, value: string) =>
+    setCurrentTask(prev => ({ ...prev, [field]: value }));
+
+  const handleTaskMemberSelect = (member: TeamMember) =>
+    setCurrentTask(prev => ({
+      ...prev,
+      assignedTo: member._id || member.id,
+      memberName: `${member.firstName} ${member.lastName}`,
+    }));
+
+  const handleTaskMemberClear = () =>
+    setCurrentTask(prev => ({ ...prev, assignedTo: "", memberName: "" }));
+
+  const addTask = () => {
+    setTaskError("");
+    if (!currentTask.assignedTo)    { setTaskError("Please select a team member."); return; }
+    if (!currentTask.title.trim())  { setTaskError("Task title is required.");      return; }
+    if (!currentTask.dueDate)       { setTaskError("Due date is required.");        return; }
+    setTasks(prev => [...prev, { ...currentTask, id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 7)}` }]);
+    setCurrentTask({ ...defaultTask });
+    setShowTaskForm(false);
+  };
+
+  const removeTask = (id: string) => setTasks(prev => prev.filter(t => t.id !== id));
 
   const validate = () => {
     const e: Record<string, string> = {};
-    if (!form.title.trim())                          e.title    = "Title is required";
-    if (!selectedClient)                             e.clientId = "Please search and select a client";
-    if (!form.budget || isNaN(Number(form.budget)))  e.budget   = "Valid budget is required";
-    if (!form.deliveryDate)                          e.deliveryDate = "Delivery date is required";
+    if (!form.title.trim())                         e.title        = "Title is required";
+    if (!selectedClient)                            e.clientId     = "Please search and select a client";
+    if (!form.budget || isNaN(Number(form.budget))) e.budget       = "Valid budget is required";
+    if (!form.deliveryDate)                         e.deliveryDate = "Delivery date is required";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -282,13 +506,31 @@ export default function AdminProjectsPage() {
         deliveryDate: form.deliveryDate,
         status:       form.status,
         category:     form.category,
-        clientId:     selectedClient!.id,       // verified backend ID
+        clientId:     selectedClient!.id,
         clientName:   `${selectedClient!.firstName} ${selectedClient!.lastName}`,
         clientEmail:  selectedClient!.email,
+        tasks: tasks.map(t => ({
+          assignedTo:  t.assignedTo,
+          title:       t.title,
+          description: t.description,
+          priority:    t.priority,
+          dueDate:     t.dueDate,
+          payAmount:   Number(t.payAmount) || 0,
+          currency:    "NGN",
+        })),
       });
-      toast.success("Project created successfully!");
+      toast.success(
+        tasks.length
+          ? `Project created with ${tasks.length} task${tasks.length > 1 ? "s" : ""}!`
+          : "Project created successfully!"
+      );
       closeModal();
-      await fetchProjects();
+      // Refresh project list
+      setLoading(true);
+      projectsAPI.getAll(statusFilter ? { status: statusFilter } : undefined)
+        .then(res => setProjects(res.data?.projects || res.data || []))
+        .catch(() => toast.error("Failed to reload projects"))
+        .finally(() => setLoading(false));
     } catch (err: any) {
       toast.error(err.message || "Failed to create project");
     } finally {
@@ -303,11 +545,8 @@ export default function AdminProjectsPage() {
       await projectsAPI.delete(id);
       toast.success("Project deleted");
       setProjects(prev => prev.filter(p => p.id !== id));
-    } catch {
-      toast.error("Failed to delete project");
-    } finally {
-      setDeleting(null);
-    }
+    } catch { toast.error("Failed to delete project"); }
+    finally { setDeleting(null); }
   };
 
   const filtered = projects.filter(p => {
@@ -327,12 +566,18 @@ export default function AdminProjectsPage() {
   };
 
   const statusVariant = (s: string) =>
-    s === "completed"  ? "success" :
+    s === "completed"   ? "success" :
     s === "in-progress" ? "warning" :
-    s === "on-hold"    ? "danger" : "info";
+    s === "on-hold"     ? "danger"  : "info";
+
+  const priorityColor = (p: string) =>
+    p === "urgent" ? "text-red-400"   :
+    p === "high"   ? "text-amber-400" :
+    p === "medium" ? "text-blue-400"  : "text-slate-400";
 
   return (
     <div className="space-y-6">
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -346,9 +591,9 @@ export default function AdminProjectsPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatsCard title="Total Projects" value={stats.total}                      icon={<FolderKanban size={20} />} iconBg="bg-brand-500/20"   iconColor="text-brand-400"   delay={0}    />
-        <StatsCard title="Active"         value={stats.active}                     icon={<TrendingUp   size={20} />} iconBg="bg-emerald-500/20" iconColor="text-emerald-400" delay={0.05} />
-        <StatsCard title="Completed"      value={stats.completed}                  icon={<Users        size={20} />} iconBg="bg-purple-500/20"  iconColor="text-purple-400"  delay={0.1}  />
+        <StatsCard title="Total Projects" value={stats.total}                       icon={<FolderKanban size={20} />} iconBg="bg-brand-500/20"   iconColor="text-brand-400"   delay={0}    />
+        <StatsCard title="Active"         value={stats.active}                      icon={<TrendingUp   size={20} />} iconBg="bg-emerald-500/20" iconColor="text-emerald-400" delay={0.05} />
+        <StatsCard title="Completed"      value={stats.completed}                   icon={<Users        size={20} />} iconBg="bg-purple-500/20"  iconColor="text-purple-400"  delay={0.1}  />
         <StatsCard title="Total Budget"   value={formatCurrency(stats.totalBudget)} icon={<DollarSign   size={20} />} iconBg="bg-gold-500/20"    iconColor="text-gold-400"    delay={0.15} />
       </div>
 
@@ -445,8 +690,7 @@ export default function AdminProjectsPage() {
                   >
                     {deleting === project.id
                       ? <div className="w-3 h-3 border border-red-400 border-t-transparent rounded-full animate-spin" />
-                      : <Trash2 size={14} />
-                    }
+                      : <Trash2 size={14} />}
                   </button>
                 </div>
               </div>
@@ -455,14 +699,10 @@ export default function AdminProjectsPage() {
         </div>
       )}
 
-      {/* Create Project Modal */}
-      <Modal
-        open={showCreateModal}
-        onClose={closeModal}
-        title="Create New Project"
-        size="lg"
-      >
+      {/* ── Create Project Modal ── */}
+      <Modal open={showCreateModal} onClose={closeModal} title="Create New Project" size="lg">
         <div className="space-y-4">
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
               label="Project Title *"
@@ -486,7 +726,6 @@ export default function AdminProjectsPage() {
             onChange={(e: any) => setForm({ ...form, description: e.target.value })}
           />
 
-          {/* ── Client lookup — replaces the old free-text clientName/clientEmail fields ── */}
           <ClientLookup
             selectedClient={selectedClient}
             onSelect={setSelectedClient}
@@ -518,20 +757,128 @@ export default function AdminProjectsPage() {
             />
           </div>
 
+          {/* ── Team Tasks Section ── */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-sm font-medium text-white">Team Tasks</p>
+                <p className="text-xs text-slate-500 mt-0.5">Assign tasks to team members at creation — optional</p>
+              </div>
+              {!showTaskForm && (
+                <button
+                  type="button"
+                  onClick={() => { setShowTaskForm(true); setTaskError(""); }}
+                  className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-all"
+                  style={{ background: "var(--brand-dim)", border: "1px solid var(--brand-border)", color: "var(--brand)" }}
+                >
+                  <Plus size={12} /> Add Task
+                </button>
+              )}
+            </div>
+
+            {/* Task form — animated */}
+            <AnimatePresence>
+              {showTaskForm && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }}
+                  style={{ overflow: "hidden" }}
+                >
+                  <TaskForm
+                    task={currentTask}
+                    onChange={handleTaskFieldChange}
+                    onMemberSelect={handleTaskMemberSelect}
+                    onClearMember={handleTaskMemberClear}
+                  />
+                  {taskError && (
+                    <p className="text-xs mt-2 flex items-center gap-1" style={{ color: "var(--rose)" }}>
+                      <AlertCircle size={11} /> {taskError}
+                    </p>
+                  )}
+                  <div className="flex gap-2 mt-3">
+                    <button
+                      type="button" onClick={addTask}
+                      className="flex-1 py-2 rounded-xl text-sm font-medium text-white"
+                      style={{ background: "var(--brand)", boxShadow: "0 2px 12px var(--brand-glow)" }}
+                    >
+                      Add Task
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setShowTaskForm(false); setCurrentTask({ ...defaultTask }); setTaskError(""); }}
+                      className="px-4 py-2 rounded-xl text-sm text-slate-400 hover:text-white transition-colors"
+                      style={{ background: "rgba(255,255,255,0.05)" }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Added tasks list */}
+            {tasks.length > 0 && (
+              <div className="space-y-2 mt-3">
+                {tasks.map(t => (
+                  <motion.div
+                    key={t.id}
+                    initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl"
+                    style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
+                  >
+                    <Briefcase size={13} className="text-slate-500 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-white truncate">{t.title}</p>
+                      <p className="text-xs text-slate-500 truncate">{t.memberName}</p>
+                    </div>
+                    <span className={`text-xs font-medium shrink-0 ${priorityColor(t.priority)}`}>
+                      {t.priority}
+                    </span>
+                    {t.payAmount && (
+                      <span className="text-xs text-slate-500 shrink-0">
+                        ₦{Number(t.payAmount).toLocaleString()}
+                      </span>
+                    )}
+                    <button
+                      type="button" onClick={() => removeTask(t.id)}
+                      className="text-slate-600 hover:text-red-400 transition-colors shrink-0"
+                    >
+                      <X size={14} />
+                    </button>
+                  </motion.div>
+                ))}
+                {!showTaskForm && (
+                  <button
+                    type="button"
+                    onClick={() => { setShowTaskForm(true); setTaskError(""); }}
+                    className="w-full py-2 rounded-xl text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                    style={{ border: "1px dashed rgba(255,255,255,0.1)" }}
+                  >
+                    + Add another task
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Notice */}
           <div
             className="p-3 rounded-xl text-xs flex items-start gap-2"
             style={{ background: "var(--brand-dim)", border: "1px solid var(--brand-border)", color: "var(--text-2)" }}
           >
             <TrendingUp size={13} className="shrink-0 mt-0.5" style={{ color: "var(--brand)" }} />
-            The client will receive an email notification once the project is created.
+            The client and any assigned team members will receive email notifications once the project is created.
           </div>
 
           <div className="flex gap-3 pt-1">
             <Button variant="secondary" className="flex-1" onClick={closeModal}>Cancel</Button>
             <Button variant="primary" className="flex-1" loading={submitting} onClick={handleCreate} icon={<Plus size={14} />}>
-              Create Project
+              {tasks.length > 0
+                ? `Create + ${tasks.length} Task${tasks.length > 1 ? "s" : ""}`
+                : "Create Project"}
             </Button>
           </div>
+
         </div>
       </Modal>
     </div>
