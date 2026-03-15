@@ -80,21 +80,48 @@ export default function LoginPage() {
     >
       <div className="w-full max-w-[430px]">
 
-        {/* Logo */}
+        {/* Logo + Back to Home */}
         <motion.div
           initial={{ opacity: 0, y: -12 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex items-center justify-center gap-3 mb-10"
+          className="flex items-center justify-between mb-10"
         >
-          <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center"
-            style={{ background: "linear-gradient(135deg, var(--brand), #818cf8)", boxShadow: "0 4px 20px var(--brand-glow)" }}
+          <Link
+            href="/"
+            className="flex items-center gap-3 group"
+            style={{ textDecoration: "none" }}
           >
-            <Crown size={17} color="#fff" />
-          </div>
-          <span className="text-lg font-bold" style={{ fontFamily: "var(--font-display)", color: "var(--text-1)" }}>
-            King Praise Techz
-          </span>
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center transition-opacity duration-200 group-hover:opacity-80"
+              style={{ background: "linear-gradient(135deg, var(--brand), #818cf8)", boxShadow: "0 4px 20px var(--brand-glow)" }}
+            >
+              <Crown size={17} color="#fff" />
+            </div>
+            <span className="text-lg font-bold" style={{ fontFamily: "var(--font-display)", color: "var(--text-1)" }}>
+              King Praise Techz
+            </span>
+          </Link>
+
+          <Link
+            href="/"
+            className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-all duration-200"
+            style={{
+              color: "var(--text-2)",
+              background: "var(--surface-1)",
+              border: "1px solid var(--border)",
+            }}
+            onMouseEnter={e => {
+              (e.currentTarget as HTMLElement).style.color = "var(--text-1)";
+              (e.currentTarget as HTMLElement).style.borderColor = "var(--border-hover, var(--text-3))";
+            }}
+            onMouseLeave={e => {
+              (e.currentTarget as HTMLElement).style.color = "var(--text-2)";
+              (e.currentTarget as HTMLElement).style.borderColor = "var(--border)";
+            }}
+          >
+            <ChevronLeft size={13} />
+            Home
+          </Link>
         </motion.div>
 
         {/* Step dots */}
