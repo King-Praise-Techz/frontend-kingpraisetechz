@@ -203,7 +203,22 @@ export default function Pricing() {
               );
             })}
           </div>
- <div className="flex-1 min-w-0">
+
+          {/* Footer note */}
+          <p className="text-center text-sm mt-10" style={{ color: "var(--text-3)" }}>
+            All prices are in Naira (NGN). Payments split across milestones.{" "}
+            Not sure which plan fits?{" "}
+            <button
+              onClick={() => setModalOpen(true)}
+              style={{ color: "var(--brand)" }}
+              className="hover:underline font-medium"
+            >
+              Tell us about your project
+            </button>{" "}
+            and we'll figure it out together.
+          </p>
+        </div>
+        <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold" style={{ color: "var(--text-1)" }}>
                 Prices are negotiable
               </p>
@@ -223,20 +238,6 @@ export default function Pricing() {
               Contact Us
             </button>
           </div>
-          {/* Footer note */}
-          <p className="text-center text-sm mt-10" style={{ color: "var(--text-3)" }}>
-            All prices are in Naira (NGN). Payments split across milestones.{" "}
-            Not sure which plan fits?{" "}
-            <button
-              onClick={() => setModalOpen(true)}
-              style={{ color: "var(--brand)" }}
-              className="hover:underline font-medium"
-            >
-              Tell us about your project
-            </button>{" "}
-            and we'll figure it out together.
-          </p>
-        </div>
       </section>
 
       {/* Modal */}
