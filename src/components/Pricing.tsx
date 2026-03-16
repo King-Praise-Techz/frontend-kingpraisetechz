@@ -117,26 +117,7 @@ export default function Pricing() {
             >
               <MessageCircle size={16} style={{ color: "var(--brand)" }} />
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold" style={{ color: "var(--text-1)" }}>
-                Prices are negotiable
-              </p>
-              <p className="text-xs mt-0.5" style={{ color: "var(--text-2)" }}>
-                These are starting points — every project is different. Fill in your details and we'll reach out with a tailored quote.
-              </p>
-            </div>
-            <button
-              onClick={() => setModalOpen(true)}
-              className="shrink-0 text-xs font-semibold px-4 py-2 rounded-xl transition-all duration-200 whitespace-nowrap"
-              style={{
-                background: "var(--brand)",
-                color: "#fff",
-                boxShadow: "0 2px 12px var(--brand-glow)",
-              }}
-            >
-              Contact Us
-            </button>
-          </div>
+           
 
           {/* Plans */}
           <div className="grid md:grid-cols-3 gap-6 items-stretch">
@@ -222,7 +203,26 @@ export default function Pricing() {
               );
             })}
           </div>
-
+ <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold" style={{ color: "var(--text-1)" }}>
+                Prices are negotiable
+              </p>
+              <p className="text-xs mt-0.5" style={{ color: "var(--text-2)" }}>
+                These are starting points — every project is different. Fill in your details and we'll reach out with a tailored quote.
+              </p>
+            </div>
+            <button
+              onClick={() => setModalOpen(true)}
+              className="shrink-0 text-xs font-semibold px-4 py-2 rounded-xl transition-all duration-200 whitespace-nowrap"
+              style={{
+                background: "var(--brand)",
+                color: "#fff",
+                boxShadow: "0 2px 12px var(--brand-glow)",
+              }}
+            >
+              Contact Us
+            </button>
+          </div>
           {/* Footer note */}
           <p className="text-center text-sm mt-10" style={{ color: "var(--text-3)" }}>
             All prices are in Naira (NGN). Payments split across milestones.{" "}

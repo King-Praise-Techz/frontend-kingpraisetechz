@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   FolderKanban, Plus, Search, Calendar, DollarSign,
   Users, TrendingUp, Eye, Trash2, Filter, UserSearch,
-  CheckCircle2, Loader2, AlertCircle, X, Briefcase,
+  CheckCircle2, Loader2, AlertCircle, X, Briefcase, Pencil,
 } from "lucide-react";
 import {
   Badge, Card, Button, Modal,
@@ -86,7 +86,7 @@ interface TaskDraft {
   memberName: string;
 }
 
-// ─── SearchDropdown — generic reusable dropdown (outside all page components) ─
+// ─── SearchDropdown — generic reusable dropdown ───────────────────────────────
 
 interface SearchDropdownProps<T> {
   label: string;
@@ -188,6 +188,13 @@ function ClientLookup({ selectedClient, onSelect, error }: ClientLookupProps) {
   const [searchErr, setSearchErr] = useState("");
   const debounceRef               = useRef<number | undefined>(undefined);
   const wrapperRef                = useRef<HTMLDivElement>(null);
+
+  // Pre-fill query display when a client is already selected (edit mode)
+  useEffect(() => {
+    if (selectedClient) {
+      setQuery(`${selectedClient.firstName} ${selectedClient.lastName} — ${selectedClient.email}`);
+    }
+  }, []);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -332,7 +339,7 @@ function TeamMemberLookup({ onSelect }: TeamMemberLookupProps) {
   );
 }
 
-// ─── TaskForm — outside AdminProjectsPage to prevent remount on state change ──
+// ─── TaskForm ─────────────────────────────────────────────────────────────────
 
 interface TaskFormProps {
   task: typeof defaultTask;
@@ -427,16 +434,28 @@ export default function AdminProjectsPage() {
   const [loading, setLoading]                 = useState(true);
   const [search, setSearch]                   = useState("");
   const [statusFilter, setStatusFilter]       = useState("");
+
+  // ── Create modal state ──
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [submitting, setSubmitting]           = useState(false);
-  const [deleting, setDeleting]               = useState<string | null>(null);
   const [form, setForm]                       = useState(defaultForm);
   const [errors, setErrors]                   = useState<Record<string, string>>({});
   const [selectedClient, setSelectedClient]   = useState<Client | null>(null);
 
-  // Task draft state
-  const [tasks, setTasks]             = useState<TaskDraft[]>([]);
-  const [currentTask, setCurrentTask] = useState({ ...defaultTask });
+  // ── Edit modal state ──
+  const [showEditModal, setShowEditModal]       = useState(false);
+  const [editingProject, setEditingProject]     = useState<Project | null>(null);
+  const [editForm, setEditForm]                 = useState(defaultForm);
+  const [editErrors, setEditErrors]             = useState<Record<string, string>>({});
+  const [editSelectedClient, setEditSelectedClient] = useState<Client | null>(null);
+  const [updating, setUpdating]                 = useState(false);
+
+  // ── Delete state ──
+  const [deleting, setDeleting]               = useState<string | null>(null);
+
+  // ── Task draft state (create modal) ──
+  const [tasks, setTasks]               = useState<TaskDraft[]>([]);
+  const [currentTask, setCurrentTask]   = useState({ ...defaultTask });
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [taskError, setTaskError]       = useState("");
 
@@ -448,7 +467,17 @@ export default function AdminProjectsPage() {
       .finally(() => setLoading(false));
   }, [statusFilter]);
 
-  const closeModal = () => {
+  // ── Refresh helper ──
+  const refreshProjects = () => {
+    setLoading(true);
+    projectsAPI.getAll(statusFilter ? { status: statusFilter } : undefined)
+      .then(res => setProjects(res.data?.projects || res.data || []))
+      .catch(() => toast.error("Failed to reload projects"))
+      .finally(() => setLoading(false));
+  };
+
+  // ── Create modal handlers ──
+  const closeCreateModal = () => {
     setShowCreateModal(false);
     setForm(defaultForm);
     setErrors({});
@@ -459,7 +488,6 @@ export default function AdminProjectsPage() {
     setTaskError("");
   };
 
-  // Stable handlers — defined in page, passed as props to TaskForm
   const handleTaskFieldChange  = (field: string, value: string) =>
     setCurrentTask(prev => ({ ...prev, [field]: value }));
 
@@ -485,7 +513,7 @@ export default function AdminProjectsPage() {
 
   const removeTask = (id: string) => setTasks(prev => prev.filter(t => t.id !== id));
 
-  const validate = () => {
+  const validateCreate = () => {
     const e: Record<string, string> = {};
     if (!form.title.trim())                         e.title        = "Title is required";
     if (!selectedClient)                            e.clientId     = "Please search and select a client";
@@ -496,7 +524,7 @@ export default function AdminProjectsPage() {
   };
 
   const handleCreate = async () => {
-    if (!validate()) return;
+    if (!validateCreate()) return;
     setSubmitting(true);
     try {
       await projectsAPI.create({
@@ -524,13 +552,8 @@ export default function AdminProjectsPage() {
           ? `Project created with ${tasks.length} task${tasks.length > 1 ? "s" : ""}!`
           : "Project created successfully!"
       );
-      closeModal();
-      // Refresh project list
-      setLoading(true);
-      projectsAPI.getAll(statusFilter ? { status: statusFilter } : undefined)
-        .then(res => setProjects(res.data?.projects || res.data || []))
-        .catch(() => toast.error("Failed to reload projects"))
-        .finally(() => setLoading(false));
+      closeCreateModal();
+      refreshProjects();
     } catch (err: any) {
       toast.error(err.message || "Failed to create project");
     } finally {
@@ -538,6 +561,82 @@ export default function AdminProjectsPage() {
     }
   };
 
+  // ── Edit modal handlers ──
+  const openEditModal = (project: Project) => {
+    setEditingProject(project);
+    setEditForm({
+      title:        project.title        || "",
+      description:  project.description  || "",
+      budget:       String(project.budget ?? ""),
+      // Normalize ISO date → "YYYY-MM-DD" for <input type="date">
+      deliveryDate: project.deliveryDate
+        ? new Date(project.deliveryDate).toISOString().slice(0, 10)
+        : "",
+      clientId:     project.clientId     || "",
+      status:       project.status       || "planning",
+      category:     project.category     || "",
+    });
+    // Re-construct a minimal Client object from the project so the lookup pre-fills
+    if (project.clientId) {
+      const [firstName = "", ...rest] = (project.clientName || "").split(" ");
+      setEditSelectedClient({
+        id:        project.clientId,
+        firstName,
+        lastName:  rest.join(" "),
+        email:     project.clientEmail || "",
+  
+      });
+    } else {
+      setEditSelectedClient(null);
+    }
+    setEditErrors({});
+    setShowEditModal(true);
+  };
+
+  const closeEditModal = () => {
+    setShowEditModal(false);
+    setEditingProject(null);
+    setEditForm(defaultForm);
+    setEditErrors({});
+    setEditSelectedClient(null);
+  };
+
+  const validateEdit = () => {
+    const e: Record<string, string> = {};
+    if (!editForm.title.trim())                           e.title        = "Title is required";
+    if (!editSelectedClient)                              e.clientId     = "Please search and select a client";
+    if (!editForm.budget || isNaN(Number(editForm.budget))) e.budget     = "Valid budget is required";
+    if (!editForm.deliveryDate)                           e.deliveryDate = "Delivery date is required";
+    setEditErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const handleUpdate = async () => {
+    if (!validateEdit() || !editingProject) return;
+    setUpdating(true);
+    try {
+      await projectsAPI.update(editingProject.id, {
+        title:        editForm.title,
+        description:  editForm.description,
+        budget:       Number(editForm.budget),
+        deliveryDate: editForm.deliveryDate,
+        status:       editForm.status,
+        category:     editForm.category,
+        clientId:     editSelectedClient!.id,
+        clientName:   `${editSelectedClient!.firstName} ${editSelectedClient!.lastName}`,
+        clientEmail:  editSelectedClient!.email,
+      });
+      toast.success("Project updated successfully!");
+      closeEditModal();
+      refreshProjects();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update project");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  // ── Delete handler ──
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this project?")) return;
     setDeleting(id);
@@ -549,6 +648,7 @@ export default function AdminProjectsPage() {
     finally { setDeleting(null); }
   };
 
+  // ── Filtering & stats ──
   const filtered = projects.filter(p => {
     const q = search.toLowerCase();
     return (
@@ -574,6 +674,73 @@ export default function AdminProjectsPage() {
     p === "urgent" ? "text-red-400"   :
     p === "high"   ? "text-amber-400" :
     p === "medium" ? "text-blue-400"  : "text-slate-400";
+
+  // ── Shared project form fields (used in both create & edit modals) ──
+  const ProjectFormFields = ({
+    f, setF, errs, client, setClient,
+  }: {
+    f: typeof defaultForm;
+    setF: (v: typeof defaultForm) => void;
+    errs: Record<string, string>;
+    client: Client | null;
+    setClient: (c: Client | null) => void;
+  }) => (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Input
+          label="Project Title *"
+          placeholder="e.g. E-commerce Website"
+          value={f.title}
+          error={errs.title}
+          onChange={(e: any) => setF({ ...f, title: e.target.value })}
+        />
+        <Input
+          label="Category"
+          placeholder="e.g. Web Development"
+          value={f.category}
+          onChange={(e: any) => setF({ ...f, category: e.target.value })}
+        />
+      </div>
+
+      <Textarea
+        label="Description"
+        placeholder="Describe the project scope and goals..."
+        value={f.description}
+        onChange={(e: any) => setF({ ...f, description: e.target.value })}
+      />
+
+      <ClientLookup
+        selectedClient={client}
+        onSelect={setClient}
+        error={errs.clientId}
+      />
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Input
+          label="Budget (NGN) *"
+          type="number"
+          placeholder="350000"
+          value={f.budget}
+          error={errs.budget}
+          prefix={<DollarSign size={14} />}
+          onChange={(e: any) => setF({ ...f, budget: e.target.value })}
+        />
+        <Input
+          label="Delivery Date *"
+          type="date"
+          value={f.deliveryDate}
+          error={errs.deliveryDate}
+          onChange={(e: any) => setF({ ...f, deliveryDate: e.target.value })}
+        />
+        <Select
+          label="Status"
+          value={f.status}
+          onChange={(e: any) => setF({ ...f, status: e.target.value })}
+          options={STATUS_OPTIONS.slice(1)}
+        />
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -677,16 +844,31 @@ export default function AdminProjectsPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* ── Action buttons: View · Edit · Delete ── */}
                 <div className="flex items-center gap-2 shrink-0">
+                  {/* View */}
                   <Link href={`/dashboard/admin/projects/${project.id}`}>
                     <button className="w-8 h-8 rounded-lg glass-card border border-white/5 flex items-center justify-center text-slate-400 hover:text-white transition-colors">
                       <Eye size={14} />
                     </button>
                   </Link>
+
+                  {/* Edit — NEW */}
+                  <button
+                    onClick={() => openEditModal(project)}
+                    className="w-8 h-8 rounded-lg bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-400 hover:bg-brand-500/20 transition-colors"
+                    title="Edit project"
+                  >
+                    <Pencil size={14} />
+                  </button>
+
+                  {/* Delete */}
                   <button
                     onClick={() => handleDelete(project.id)}
                     disabled={deleting === project.id}
                     className="w-8 h-8 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                    title="Delete project"
                   >
                     {deleting === project.id
                       ? <div className="w-3 h-3 border border-red-400 border-t-transparent rounded-full animate-spin" />
@@ -699,63 +881,17 @@ export default function AdminProjectsPage() {
         </div>
       )}
 
-      {/* ── Create Project Modal ── */}
-      <Modal open={showCreateModal} onClose={closeModal} title="Create New Project" size="lg">
+      {/* ══════════════════════════════════════════════════════════
+          Create Project Modal
+      ══════════════════════════════════════════════════════════ */}
+      <Modal open={showCreateModal} onClose={closeCreateModal} title="Create New Project" size="lg">
         <div className="space-y-4">
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Project Title *"
-              placeholder="e.g. E-commerce Website"
-              value={form.title}
-              error={errors.title}
-              onChange={(e: any) => setForm({ ...form, title: e.target.value })}
-            />
-            <Input
-              label="Category"
-              placeholder="e.g. Web Development"
-              value={form.category}
-              onChange={(e: any) => setForm({ ...form, category: e.target.value })}
-            />
-          </div>
-
-          <Textarea
-            label="Description"
-            placeholder="Describe the project scope and goals..."
-            value={form.description}
-            onChange={(e: any) => setForm({ ...form, description: e.target.value })}
+          <ProjectFormFields
+            f={form} setF={setForm}
+            errs={errors}
+            client={selectedClient} setClient={setSelectedClient}
           />
-
-          <ClientLookup
-            selectedClient={selectedClient}
-            onSelect={setSelectedClient}
-            error={errors.clientId}
-          />
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Input
-              label="Budget (NGN) *"
-              type="number"
-              placeholder="350000"
-              value={form.budget}
-              error={errors.budget}
-              prefix={<DollarSign size={14} />}
-              onChange={(e: any) => setForm({ ...form, budget: e.target.value })}
-            />
-            <Input
-              label="Delivery Date *"
-              type="date"
-              value={form.deliveryDate}
-              error={errors.deliveryDate}
-              onChange={(e: any) => setForm({ ...form, deliveryDate: e.target.value })}
-            />
-            <Select
-              label="Status"
-              value={form.status}
-              onChange={(e: any) => setForm({ ...form, status: e.target.value })}
-              options={STATUS_OPTIONS.slice(1)}
-            />
-          </div>
 
           {/* ── Team Tasks Section ── */}
           <div>
@@ -776,7 +912,6 @@ export default function AdminProjectsPage() {
               )}
             </div>
 
-            {/* Task form — animated */}
             <AnimatePresence>
               {showTaskForm && (
                 <motion.div
@@ -816,7 +951,6 @@ export default function AdminProjectsPage() {
               )}
             </AnimatePresence>
 
-            {/* Added tasks list */}
             {tasks.length > 0 && (
               <div className="space-y-2 mt-3">
                 {tasks.map(t => (
@@ -831,18 +965,11 @@ export default function AdminProjectsPage() {
                       <p className="text-sm text-white truncate">{t.title}</p>
                       <p className="text-xs text-slate-500 truncate">{t.memberName}</p>
                     </div>
-                    <span className={`text-xs font-medium shrink-0 ${priorityColor(t.priority)}`}>
-                      {t.priority}
-                    </span>
+                    <span className={`text-xs font-medium shrink-0 ${priorityColor(t.priority)}`}>{t.priority}</span>
                     {t.payAmount && (
-                      <span className="text-xs text-slate-500 shrink-0">
-                        ₦{Number(t.payAmount).toLocaleString()}
-                      </span>
+                      <span className="text-xs text-slate-500 shrink-0">₦{Number(t.payAmount).toLocaleString()}</span>
                     )}
-                    <button
-                      type="button" onClick={() => removeTask(t.id)}
-                      className="text-slate-600 hover:text-red-400 transition-colors shrink-0"
-                    >
+                    <button type="button" onClick={() => removeTask(t.id)} className="text-slate-600 hover:text-red-400 transition-colors shrink-0">
                       <X size={14} />
                     </button>
                   </motion.div>
@@ -871,7 +998,7 @@ export default function AdminProjectsPage() {
           </div>
 
           <div className="flex gap-3 pt-1">
-            <Button variant="secondary" className="flex-1" onClick={closeModal}>Cancel</Button>
+            <Button variant="secondary" className="flex-1" onClick={closeCreateModal}>Cancel</Button>
             <Button variant="primary" className="flex-1" loading={submitting} onClick={handleCreate} icon={<Plus size={14} />}>
               {tasks.length > 0
                 ? `Create + ${tasks.length} Task${tasks.length > 1 ? "s" : ""}`
@@ -881,6 +1008,49 @@ export default function AdminProjectsPage() {
 
         </div>
       </Modal>
+
+      {/* ══════════════════════════════════════════════════════════
+          Edit Project Modal  ← NEW
+      ══════════════════════════════════════════════════════════ */}
+      <Modal open={showEditModal} onClose={closeEditModal} title="Edit Project" size="lg">
+        <div className="space-y-4">
+
+          {/* Editing badge */}
+          {editingProject && (
+            <div
+              className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs"
+              style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)", color: "var(--text-2)" }}
+            >
+              <FolderKanban size={12} style={{ color: "var(--brand)" }} />
+              Editing: <span className="text-white font-medium">{editingProject.title}</span>
+            </div>
+          )}
+
+          <ProjectFormFields
+            f={editForm} setF={setEditForm}
+            errs={editErrors}
+            client={editSelectedClient} setClient={setEditSelectedClient}
+          />
+
+          {/* Notice */}
+          <div
+            className="p-3 rounded-xl text-xs flex items-start gap-2"
+            style={{ background: "var(--brand-dim)", border: "1px solid var(--brand-border)", color: "var(--text-2)" }}
+          >
+            <TrendingUp size={13} className="shrink-0 mt-0.5" style={{ color: "var(--brand)" }} />
+            Saving will update the project immediately. Tasks already assigned to this project are managed from the project detail page.
+          </div>
+
+          <div className="flex gap-3 pt-1">
+            <Button variant="secondary" className="flex-1" onClick={closeEditModal}>Cancel</Button>
+            <Button variant="primary" className="flex-1" loading={updating} onClick={handleUpdate} icon={<Pencil size={14} />}>
+              Save Changes
+            </Button>
+          </div>
+
+        </div>
+      </Modal>
+
     </div>
   );
 }
